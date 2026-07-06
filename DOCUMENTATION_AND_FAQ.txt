@@ -1,0 +1,203 @@
+================================================================================
+                    ZIUROCHAT - FULL SYSTEM DOCUMENTATION & FAQ
+================================================================================
+Application Name: ZiuroChat Real-Time Chat Platform
+Built With: Next.js 16 (App Router), React 19, MongoDB Atlas, Cloudinary CDN,
+            Socket.io, TanStack React Query, Tailwind CSS, Lucide Icons.
+Version: 1.0.0
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. SYSTEM OVERVIEW & ARCHITECTURE
+2. DATA STORAGE & DATABASE MODELS (MONGODB ATLAS & CLOUDINARY)
+3. REAL-TIME ENGINE (WEBSOCKETS, POLLING & TICK STATUSES)
+4. COMPLETE FOLDER & FILE STRUCTURE EXPLANATION
+5. COMPREHENSIVE QUESTIONS & ANSWERS (Q&A / FAQ)
+================================================================================
+
+
+1. SYSTEM OVERVIEW & ARCHITECTURE
+--------------------------------------------------------------------------------
+ZiuroChat is a high-performance, full-stack, real-time messaging application.
+It follows a serverless API architecture combined with WebSocket connections.
+
+- Frontend Layer: Next.js 16 App Router using React 19 Client Components, 
+  TanStack React Query for async state caching, and Lucide Icons for vector UI.
+- Backend API Layer: Next.js Route Handlers (`app/api/`) processing authentication,
+  user profile management, search indexing, and message persistence.
+- Database Layer: MongoDB Atlas (Cloud NoSQL Database) accessed via Mongoose ODM.
+- Media Storage Layer: Cloudinary CDN for instant media file uploads & streaming.
+- Real-Time Layer: Socket.io Client for bi-directional event broadcasting with
+  automatic HTTP polling fallback.
+
+
+2. DATA STORAGE & DATABASE MODELS (MONGODB ATLAS & CLOUDINARY)
+--------------------------------------------------------------------------------
+Q: Where is data stored?
+- Structured Text Data (Users, Passwords, Messages, Read Receipts) is stored in
+  a cloud-hosted MongoDB Atlas NoSQL Database.
+- Media Attachments (Photos, Videos, Audio, Documents) are stored on Cloudinary
+  CDN, returning a secure HTTPS URL saved inside MongoDB.
+
+A. USER MODEL (File: `models/User.ts`)
+   - `_id`: Auto-generated MongoDB ObjectId (converted to String ID).
+   - `name`: Full display name of the user.
+   - `email`: Lowercase, indexed, unique email address.
+   - `username`: Lowercase, indexed, unique @username handle.
+   - `password`: Salted and hashed password using Bcrypt.js (10 rounds).
+   - `bio`: Short user bio description (max 200 characters).
+   - `profilePhoto`: Cloudinary HTTPS CDN link or avatar URL.
+   - `createdAt` & `updatedAt`: Automatic ISO timestamps.
+
+B. MESSAGE MODEL (File: `models/Message.ts`)
+   - `_id`: Auto-generated MongoDB ObjectId.
+   - `senderId`: MongoDB User ID of the message sender.
+   - `receiverId`: MongoDB User ID of the recipient.
+   - `text`: Plain text string content of the message.
+   - `mediaUrl`: Cloudinary CDN URL for image/file attachments.
+   - `mediaType`: Type classification ('image' | 'video' | 'audio' | 'document').
+   - `fileName`: Original name of uploaded attachment file.
+   - `fileSize`: Attachment file size in bytes.
+   - `status`: Message status badge ('sent' | 'delivered' | 'seen').
+   - `createdAt` & `updatedAt`: ISO timestamps used for sorting conversations.
+
+
+3. REAL-TIME ENGINE (WEBSOCKETS, POLLING & TICK STATUSES)
+--------------------------------------------------------------------------------
+A. MESSAGE TICK STATUS WORKFLOW:
+   - Single Tick ('sent'): Message has been successfully stored in MongoDB Atlas.
+   - Double Grey Tick ('delivered'): Message delivered to receiver.
+   - Double Green Tick ('seen'): Recipient has opened the chat thread. Triggered
+     automatically when viewing the conversation or via `POST /api/messages/read`.
+
+B. TYPING INDICATOR & SIDEBAR PRIORITIZATION:
+   - When user A types into the chat input, a socket event `typing` is emitted.
+   - User B's interface receives the signal and displays bouncing animated dots.
+   - Conversations where a user is currently typing are automatically sorted to the
+     VERY TOP of the sidebar list above all other chats.
+
+C. INSTANT UI UPDATES (OPTIMISTIC RENDERING):
+   - When a user presses Send, TanStack React Query immediately appends the new
+     message to the cached message thread (`setQueryData`).
+   - The message appears on the user's screen in 0ms without waiting for HTTP network round-trips.
+
+
+4. COMPLETE FOLDER & FILE STRUCTURE EXPLANATION
+--------------------------------------------------------------------------------
+The project codebase is organized into modular directories:
+
+📂 `app/` (Next.js App Router Root)
+   ├── 📄 `layout.tsx`        : Global HTML layout wrapping AuthProvider, QueryClient, and Toaster.
+   ├── 📄 `page.tsx`          : Root landing page; redirects authenticated users to `/chat` or guests to `/login`.
+   ├── 📄 `globals.css`       : Global CSS tokens, glassmorphism utilities, scrollbars, and keyframe animations.
+   ├── 📂 `login/`            : Single-step login form (`app/login/page.tsx`).
+   ├── 📂 `signup/`           : Direct registration form (`app/signup/page.tsx`) without OTP verification.
+   ├── 📂 `chat/`             : Primary Chat UI (`app/chat/page.tsx`) containing user search, conversation list,
+   │                            active chat thread, media upload button, and 3-dot dropdowns with Log Out.
+   ├── 📂 `profile/`          : User Profile Page (`app/profile/page.tsx`) for editing avatar, name, username, bio.
+   └── 📂 `api/`              : Serverless API Route Handlers:
+       ├── 📂 `auth/login/`   : POST endpoint verifying email/username & password via Bcrypt, returning JWT token.
+       ├── 📂 `auth/signup/`  : POST endpoint registering new users into MongoDB Atlas.
+       ├── 📂 `media/`        : POST endpoint streaming media buffers directly into Cloudinary CDN.
+       ├── 📂 `messages/`     : GET/POST endpoint fetching message threads & saving new messages.
+       │   ├── 📂 `conversations/`: GET endpoint returning recent conversation list sorted by latest timestamp.
+       │   └── 📂 `read/`     : POST endpoint updating unread message statuses to 'seen' in MongoDB Atlas.
+       ├── 📂 `presence/check/`: POST endpoint checking online presence statuses.
+       └── 📂 `users/`
+           ├── 📂 `profile/`  : GET/PUT endpoint fetching & updating bio, avatar, name, and username.
+           ├── 📂 `search/`   : GET endpoint searching users by email or @username.
+           └── 📂 `[id]/`     : GET endpoint returning public user profile card by ID.
+
+📂 `context/`
+   ├── 📄 `AuthContext.tsx`   : Manages user auth state, JWT token storage, LocalStorage, and `updateUser()`.
+   └── 📄 `SocketContext.tsx` : Manages Socket.io client connection, reconnection retries, and presence events.
+
+📂 `hooks/`
+   ├── 📄 `useQueries.ts`     : Encapsulates TanStack React Query hooks (`useMessages`, `useConversations`, `useSendMessage`).
+   └── 📄 `useSocket.ts`      : Custom socket hooks for live typing indicators and instant message listeners.
+
+📂 `lib/`
+   ├── 📄 `mongodb.ts`        : Database helper caching Mongoose connections across serverless route invocations.
+   └── 📄 `utils.ts`          : API Base URL normalizer (`getApiBase`), `fetchApi`, and Cloudinary CDN URL helpers.
+
+📂 `models/`
+   ├── 📄 `User.ts`           : Mongoose Schema & Interface definition for User accounts in MongoDB Atlas.
+   └── 📄 `Message.ts`        : Mongoose Schema & Interface definition for Chat Messages in MongoDB Atlas.
+
+
+5. COMPREHENSIVE QUESTIONS & ANSWERS (Q&A / FAQ)
+--------------------------------------------------------------------------------
+
+Q1: How does user authentication work without OTP?
+A: Registration is streamlined into a simple 1-step form in `app/signup/page.tsx`.
+   Users enter their Full Name, Email, Username, and Password. Upon submitting,
+   the server hashes the password with Bcrypt, creates the user document in
+   MongoDB Atlas, generates a signed JWT token, and logs the user in immediately.
+
+Q2: Where are user accounts and passwords stored, and how are passwords secured?
+A: Accounts are stored in the MongoDB Atlas database (`users` collection).
+   Passwords are NEVER stored in plain text. They are hashed using `bcryptjs` with
+   a salt factor of 10 rounds before being written to MongoDB.
+
+Q3: How does user search work when typing an email or @username?
+A: When typing in the sidebar search box (`app/chat/page.tsx`), `useSearchUsers(query)`
+   triggers a request to `GET /api/users/search?q=...`. The route queries MongoDB
+   Atlas using a case-insensitive regex match against both `email` and `username` fields.
+
+Q4: How does a message appear instantly on the screen without waiting for the server response?
+A: We use Optimistic UI Updates via TanStack React Query in `hooks/useQueries.ts`.
+   When `useSendMessage` is triggered, `onSuccess` / `onMutate` immediately writes the new
+   message object to the client-side query cache (`setQueryData`). The message appears
+   on screen in 0ms while the HTTP POST request completes in the background.
+
+Q5: How do single tick, double tick, and double green tick status indicators transition?
+A: 
+   - Single Tick ('sent'): Icon `<Check />`. Assigned when message is written to MongoDB.
+   - Double Grey Tick ('delivered'): Icon `<CheckCheck />`. Assigned when message is routed to receiver.
+   - Double Green Tick ('seen'): Icon `<CheckCheck className="text-emerald-400 font-bold" />`.
+     Assigned when the recipient opens the chat window and calls `POST /api/messages/read`.
+
+Q6: Where are uploaded media files (images, audio, videos, documents) stored?
+A: Media files are uploaded directly to Cloudinary CDN via `POST /api/media`.
+   The API route streams the file buffer to Cloudinary, which returns a secure
+   HTTPS URL stored in the `mediaUrl` field of the message document in MongoDB Atlas.
+
+Q7: How does the typing indicator work and why does a typing user move to the top of the sidebar?
+A: When a user types in the chat input, socket event `typing` is emitted. In `app/chat/page.tsx`,
+   the sidebar conversations list `.sort()` comparator checks if `(c.id === userId && isOtherTyping)`.
+   If true, that conversation is dynamically sorted to index 0 (the very top of the list).
+
+Q8: What happens if the Socket.io WebSocket server is offline or reconnecting?
+A: `SocketContext.tsx` uses graceful reconnection logic capped at 3 retries to prevent console spam.
+   Additionally, TanStack React Query in `hooks/useQueries.ts` includes automatic background
+   HTTP polling (`refetchInterval: 2000` for messages, `refetchInterval: 3000` for conversations).
+   Even if WebSockets are offline, messages and status updates continue working seamlessly!
+
+Q9: How does the Profile page update user avatars, names, usernames, and bios?
+A: The Profile page (`app/profile/page.tsx`) lets users upload a photo (sent to Cloudinary)
+   and edit Name, Username, and Bio. Submitting sends a `PUT /api/users/profile` request, which
+   validates username uniqueness in MongoDB Atlas, updates the user record, and syncs `AuthContext`.
+
+Q10: How are database connections managed in Next.js serverless route handlers without leaking connections?
+A: File `lib/mongodb.ts` implements a global connection cache (`global.mongooseCache`).
+   Instead of opening a new database connection on every serverless API request, it reuses
+   the existing active Mongoose connection across Hot Module Reloads (HMR) and route invocations.
+
+Q11: How is JWT token authentication verified across API routes?
+A: Client requests send an `Authorization: Bearer <token>` header generated upon login.
+   API route handlers extract the token and verify it using `jwt.verify(token, JWT_SECRET)`
+   to extract the current user's MongoDB ObjectId.
+
+Q12: How do I configure environment variables to run this app locally?
+A: Create a `.env.local` file in the root folder containing:
+   NEXT_PUBLIC_API_URL=/api
+   JWT_SECRET=ziurochat_secret_key_2026
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/ziurochat
+   CLOUDINARY_CLOUD_NAME=your_cloud_name
+   CLOUDINARY_API_KEY=your_api_key
+   CLOUDINARY_API_SECRET=your_api_secret
+
+================================================================================
+                           END OF DOCUMENTATION
+================================================================================
