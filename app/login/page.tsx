@@ -70,28 +70,28 @@ function LoginPageContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-background via-background to-primary/5 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center px-3 sm:px-4 bg-gradient-to-br from-background via-background to-primary/5 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-radial from-primary/5 to-transparent rounded-full blur-2xl" />
+        <div className="absolute -top-40 -right-40 w-48 sm:w-80 h-48 sm:h-80 bg-primary/10 rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-40 -left-40 w-48 sm:w-80 h-48 sm:h-80 bg-primary/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-gradient-radial from-primary/5 to-transparent rounded-full blur-2xl" />
       </div>
 
       <div className="w-full max-w-md relative z-10 animate-slide-up">
         {/* Logo / Branding */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden shadow-lg mb-3">
+        <div className="text-center mb-4 sm:mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-lg mb-2 sm:mb-3">
             <img src="/logo.png" alt="ZiChat Logo" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+          <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
             ZiChat
           </h1>
           <p className="text-xs text-muted-foreground mt-1">Sign in to continue chatting</p>
         </div>
 
         {/* Card */}
-        <div className="bg-card rounded-2xl p-8 shadow-2xl border border-border">
+        <div className="bg-card rounded-xl sm:rounded-2xl p-5 sm:p-8 shadow-2xl border border-border">
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* ZiName */}
             <div className="space-y-1.5">
@@ -187,7 +187,7 @@ function LoginPageContent() {
             {/* Signup link */}
             <p className="text-center text-sm text-muted-foreground pt-2">
               Don&apos;t have a ZiName?{' '}
-              <a href="https://https://zeename.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
+              <a href="https://zeename.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
                 Create ZiName <ArrowRight className="h-3 w-3" />
               </a>
             </p>

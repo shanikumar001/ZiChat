@@ -22,7 +22,7 @@ export default function SignupPage() {
 
   useEffect(() => {
     // Redirect all signup requests to the main ZiName portal
-    window.location.href = 'https://https://zeename.onrender.com/';
+    window.location.href = 'https://zeename.onrender.com/';
   }, []);
 
   // Auto-generate username from email if username is empty

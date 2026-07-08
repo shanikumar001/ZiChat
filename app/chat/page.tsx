@@ -380,7 +380,7 @@ function ChatPageContent() {
   }
 
   return (
-    <main className="flex flex-col h-screen max-w-6xl mx-auto px-2 sm:px-4 py-2">
+    <main className="flex flex-col h-dvh max-w-6xl mx-auto px-0 sm:px-4 py-0 sm:py-2">
       {/* Top bar */}
       {/* <div className="flex items-center justify-between px-4 py-2 mb-2 rounded-xl bg-card border border-border">
         <div className="flex items-center gap-2">
@@ -392,10 +392,10 @@ function ChatPageContent() {
 
       </div> */}
 
-      <div className="flex flex-1 min-h-0 border border-border rounded-xl overflow-hidden bg-card shadow-xl">
+      <div className="flex flex-1 min-h-0 border-0 sm:border border-border rounded-none sm:rounded-xl overflow-hidden bg-card shadow-xl">
         {/* Sidebar */}
         <div className={`w-full md:w-80 border-r border-border bg-gradient-to-b from-muted/30 to-background flex flex-col ${userId ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Link
                 href="/profile"
@@ -409,7 +409,7 @@ function ChatPageContent() {
                     getInitials(user.name)
                   )}
                 </div>
-                <span className="text-xs font-semibold hidden sm:inline">{user.name}</span>
+                <span className="text-xs font-semibold">{user.name}</span>
               </Link>
               {/* <button
                 onClick={() => setShowCreateGroupModal(true)}
@@ -427,7 +427,7 @@ function ChatPageContent() {
                 <MoreVertical className="h-4 w-4 text-muted-foreground" />
               </button>
               {menuOpen === 'sidebar' && (
-                <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl">
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
                   <button onClick={() => { setShowCreateGroupModal(true); setMenuOpen(null); }}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer text-foreground font-medium">
                     <Users className="h-4 w-4 text-primary" />
@@ -466,7 +466,7 @@ function ChatPageContent() {
           </div>
 
           {/* User Search Bar */}
-          <div className="p-3 border-b border-border bg-card/60 relative">
+          <div className="p-2.5 sm:p-3 border-b border-border bg-card/60 relative">
             <div className="relative flex items-center">
               <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               <input
@@ -580,7 +580,7 @@ function ChatPageContent() {
                     <button
                       key={c.id as string}
                       onClick={() => router.push(`/chat?userId=${c.id}`)}
-                      className={`w-full flex items-center gap-3 p-4 hover:bg-accent/70 transition-all duration-200 text-left border-b border-border/50 relative group ${userId === c.id ? 'bg-primary/10 border-l-4 border-l-primary' : ''
+                      className={`w-full flex items-center gap-3 p-3 sm:p-4 hover:bg-accent/70 active:bg-accent/90 transition-all duration-200 text-left border-b border-border/50 relative group ${userId === c.id ? 'bg-primary/10 border-l-4 border-l-primary' : ''
                         }`}
                     >
                       <div className="relative">
@@ -642,12 +642,12 @@ function ChatPageContent() {
         </div>
 
         {/* Conversation area */}
-        <div className={`flex-1 flex flex-col bg-gradient-to-b from-background to-muted/10 ${userId ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`flex-1 flex flex-col bg-gradient-to-b from-background to-muted/10 ${userId ? 'flex' : 'hidden md:flex'}`} style={{ maxHeight: '100%' }}>
           {userId ? (
             <>
               {/* Chat header */}
-              <div className="flex items-center gap-3 p-4 border-b border-border bg-card/95 backdrop-blur-md relative z-30">
-                <button className="md:hidden p-2 rounded-lg hover:bg-accent" onClick={() => router.push('/chat')}>
+              <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 border-b border-border bg-card/95 backdrop-blur-md relative z-30">
+                <button className="md:hidden p-2 rounded-lg hover:bg-accent active:bg-accent/80 shrink-0" onClick={() => router.push('/chat')}>
                   <ArrowLeft className="h-5 w-5" />
                 </button>
                 {displayUser && (
@@ -668,8 +668,8 @@ function ChatPageContent() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-base block truncate">{displayUser.name}</span>
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="font-semibold text-sm sm:text-base block truncate">{displayUser.name}</span>
                         {displayUser.isGroup && (
                           <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">Group</span>
                         )}
@@ -711,7 +711,7 @@ function ChatPageContent() {
                         <MoreVertical className="h-5 w-5 text-muted-foreground" />
                       </button>
                       {menuOpen === 'chat' && (
-                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl">
+                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
                           {displayUser.isGroup && (
                             <button onClick={() => { setShowGroupDetailsModal(true); setMenuOpen(null); }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer">
@@ -755,7 +755,7 @@ function ChatPageContent() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 custom-scrollbar" onClick={() => setMenuOpen(null)}>
+              <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 custom-scrollbar" onClick={() => setMenuOpen(null)}>
                 {messagesLoading ? (
                   <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
                 ) : (messages as Record<string, unknown>[]).filter((m) => {
@@ -789,7 +789,7 @@ function ChatPageContent() {
                             </div>
                           )}
                           <div className={`flex ${(m.isMe as boolean) ? 'justify-end' : 'justify-start'} group relative`}>
-                            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-all duration-200 relative ${(m.isMe as boolean)
+                            <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-sm shadow-sm transition-all duration-200 relative ${(m.isMe as boolean)
                               ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-tr-sm'
                               : 'bg-muted border border-border/50 rounded-tl-sm text-foreground'
                               }`}>
@@ -851,7 +851,7 @@ function ChatPageContent() {
                               {/* Delete button */}
                               <button
                                 onClick={() => handleDeleteMessage(m.id as string)}
-                                className={`absolute -top-2 ${(m.isMe as boolean) ? '-left-7' : '-right-7'} p-1.5 bg-card border border-border rounded-full shadow-sm text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity duration-200`}
+                                className={`absolute -top-2 ${(m.isMe as boolean) ? '-left-2 sm:-left-7' : '-right-2 sm:-right-7'} p-1.5 bg-card border border-border rounded-full shadow-sm text-muted-foreground hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200`}
                                 title="Delete for me"
                               >
                                 <Trash2 className="h-3 w-3" />
@@ -878,7 +878,7 @@ function ChatPageContent() {
               </div>
 
               {/* Input */}
-              <form onSubmit={handleSend} className="p-4 border-t border-border bg-card/80 backdrop-blur-sm">
+              <form onSubmit={handleSend} className="p-3 sm:p-4 border-t border-border bg-card/80 backdrop-blur-sm pb-safe-input">
                 {selectedFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3 max-h-32 overflow-y-auto p-2 bg-muted/30 rounded-lg border border-dashed border-primary/20">
                     {selectedFiles.map((file, i) => (
@@ -941,9 +941,9 @@ function ChatPageContent() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/10 to-transparent">
-              <div className="text-center max-w-md px-6 animate-fade-in">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-4">
-                  <MessageSquare className="h-10 w-10 text-primary opacity-40" />
+              <div className="text-center max-w-md px-4 sm:px-6 animate-fade-in">
+                <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary/10 mb-3 sm:mb-4">
+                  <MessageSquare className="h-8 w-8 sm:h-10 sm:w-10 text-primary opacity-40" />
                 </div>
                 <p className="text-lg font-semibold mb-2">No conversation selected</p>
                 <p className="text-sm">Select a conversation from the sidebar to start chatting</p>
@@ -956,7 +956,7 @@ function ChatPageContent() {
       {/* Create Group Modal */}
       {showCreateGroupModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full shadow-2xl p-6 relative animate-slide-up">
+          <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full shadow-2xl p-5 sm:p-6 relative animate-slide-up mobile-modal-scroll">
             <button
               onClick={() => setShowCreateGroupModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -1163,7 +1163,7 @@ function ChatPageContent() {
       {/* Edit Group Info & Photo Modal */}
       {showGroupDetailsModal && isSelectedGroup && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full shadow-2xl p-6 relative animate-slide-up">
+          <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full shadow-2xl p-5 sm:p-6 relative animate-slide-up mobile-modal-scroll">
             <button
               onClick={() => setShowGroupDetailsModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"

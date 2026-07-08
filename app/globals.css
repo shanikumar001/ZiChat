@@ -236,3 +236,51 @@ input:focus, textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
+
+/* ── Mobile Utilities ────────────────────────────────── */
+/* Eliminate 300ms tap delay on touch devices */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Dynamic viewport height for mobile browser chrome */
+.h-dvh {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Safe area padding for notched devices (e.g. iPhone home bar) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pb-safe-input {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+
+/* Hide scrollbar on touch devices (they have native momentum scroll) */
+@media (hover: none) and (pointer: coarse) {
+  .custom-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .custom-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Prevent body scroll when modals are open on mobile */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Mobile-safe modal scrolling */
+.mobile-modal-scroll {
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}

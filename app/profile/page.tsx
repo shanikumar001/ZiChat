@@ -134,12 +134,12 @@ function ProfilePageContent() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5 relative overflow-hidden">
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
+        <div className="absolute -top-40 -right-40 w-48 sm:w-80 h-48 sm:h-80 bg-primary/10 rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-40 -left-40 w-48 sm:w-80 h-48 sm:h-80 bg-primary/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
       </div>
 
       {/* Top Navbar */}
-      <header className="w-full max-w-4xl mx-auto px-4 py-4 flex items-center justify-between relative z-10">
+      <header className="w-full max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between relative z-10">
         <Link
           href="/chat"
           className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border text-sm font-medium hover:bg-accent transition-colors"
@@ -155,9 +155,9 @@ function ProfilePageContent() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-6 relative z-10 animate-slide-up">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+      <main className="flex-1 max-w-2xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 relative z-10 animate-slide-up">
+        <div className="text-center mb-5 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
             Edit Profile
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -166,7 +166,7 @@ function ProfilePageContent() {
         </div>
 
         {/* Profile Card */}
-        <div className="bg-card rounded-2xl p-6 sm:p-8 shadow-2xl border border-border">
+        <div className="bg-card rounded-xl sm:rounded-2xl p-5 sm:p-8 shadow-2xl border border-border">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Avatar Section */}
             <div className="flex flex-col items-center justify-center">
