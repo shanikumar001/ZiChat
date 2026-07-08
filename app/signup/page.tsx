@@ -21,8 +21,9 @@ export default function SignupPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user) router.replace('/chat');
-  }, [user, router]);
+    // Redirect all signup requests to the main ZiName portal
+    window.location.href = 'https://https://zeename.onrender.com/';
+  }, []);
 
   // Auto-generate username from email if username is empty
   const handleEmailChange = (val: string) => {

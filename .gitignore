@@ -58,3 +58,7 @@ logs/
 
 # Deployment & Vercel
 .vercel/
+
+generate-synopsis.js
+
+ZiChat_Project_Synopsis.docx

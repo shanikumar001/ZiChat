@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { getApiBase, fetchApi } from '../../lib/utils';
 import { toast } from 'sonner';
-import { LogIn, Eye, EyeOff, MessageSquare, ArrowRight, Mail, Lock } from 'lucide-react';
+import { LogIn, Eye, EyeOff, MessageSquare, ArrowRight, AtSign, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 function LoginPageContent() {
@@ -93,15 +93,15 @@ function LoginPageContent() {
         {/* Card */}
         <div className="bg-card rounded-2xl p-8 shadow-2xl border border-border">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email / Username */}
+            {/* ZiName */}
             <div className="space-y-1.5">
               <label htmlFor="emailOrUsername" className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                <Mail className="h-4 w-4 text-muted-foreground" /> Email or Username
+                <AtSign className="h-4 w-4 text-muted-foreground" /> ZiName (username)
               </label>
               <input
                 id="emailOrUsername"
                 type="text"
-                placeholder="you@example.com or username"
+                placeholder="Enter your ZiName"
                 value={emailOrUsername}
                 onChange={(e) => setEmailOrUsername(e.target.value)}
                 disabled={loading}
@@ -186,10 +186,10 @@ function LoginPageContent() {
 
             {/* Signup link */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Don&apos;t have an account?{' '}
-              <Link href="/signup" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
-                Sign up <ArrowRight className="h-3 w-3" />
-              </Link>
+              Don&apos;t have a ZiName?{' '}
+              <a href="https://https://zeename.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
+                Create ZiName <ArrowRight className="h-3 w-3" />
+              </a>
             </p>
           </form>
         </div>
