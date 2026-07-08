@@ -1,218 +1,259 @@
-# 💬 ZiuroChat — Real-Time Chat Application
+# ZiChat — Real-Time Chat Application
 
-**ZiuroChat** is a modern, full-stack, real-time messaging web application built with **Next.js 16 (App Router)**, **React 19**, **MongoDB Atlas**, **Cloudinary CDN**, **Socket.io**, and **TanStack React Query**.
+A modern, full-stack, real-time messaging web application built with Next.js 16 (App Router), React 19, MongoDB Atlas, Cloudinary CDN, Socket.io, and TanStack React Query.
 
----
-
-## 🌟 Key Features
-
-- 🔐 **Simplified 1-Step Authentication**: Register instantly with Name, Email, Username, and Password (no OTP verification step required).
-- 🔍 **User Search & Direct Chat**: Search any registered user by their email address or `@username` and jump straight into a direct chat.
-- ⚡ **Instant Real-Time Messaging**: Messages render in **0ms** using optimistic UI updates powered by TanStack React Query and Socket.io.
-- 📌 **Message Status Ticks**:
-  - **Single Tick (`sent`)**: Message sent to the server.
-  - **Double Grey Tick (`delivered`)**: Message delivered to the recipient.
-  - **Double Green Tick (`seen`)**: Recipient opened and read the conversation.
-- ⌨️ **Live Typing Indicators & Smart Sorting**:
-  - Displays animated bouncing typing dots when a user starts typing.
-  - Active typing conversations are automatically prioritized to the **very top of the sidebar**.
-- 🗂️ **Newest Messages on Top**: Conversation list dynamically orders by the timestamp of the latest sent or received message.
-- 🖼️ **Cloudinary Media Uploads**: Send images, videos, audio, and documents with instant Cloudinary CDN stream uploading.
-- 👤 **Custom User Profiles**: Dedicated Profile page to update your **Avatar**, **Full Name**, **@username**, and **Bio**.
-- 🌙 **Modern Design & Animations**: Responsive dark-mode interface with glassmorphism, smooth gradients, and Tailwind CSS animations.
+> ZiChat uses [ZiName](https://zeename.onrender.com/) as its identity provider — users authenticate with their ZiName credentials to access the chat platform.
 
 ---
 
-## 🛠️ Tech Stack & Architecture
+## Table of Contents
 
-```mermaid
-graph TD;
-    Client[Next.js 16 Client / React 19] -->|JWT Auth & REST API| Server[Next.js Serverless Route Handlers];
-    Client -->|WebSockets / Polling| Socket[Socket.io Real-Time Engine];
-    Server -->|Mongoose ODM| Mongo[(MongoDB Atlas Database)];
-    Server -->|Media Stream| Cloudinary[(Cloudinary CDN Storage)];
-```
-
-| Component | Technology | Description |
-| :--- | :--- | :--- |
-| **Frontend Framework** | **Next.js 16 (App Router)** | Server Components & Client Hooks with Turbopack |
-| **UI Library & Icons** | **React 19 & Lucide Icons** | Component state management and vector icons |
-| **Styling** | **Tailwind CSS & Vanilla CSS** | Glassmorphism, animations, responsive design |
-| **State & Data Fetching** | **TanStack React Query v5** | Smart caching, background polling fallback & optimistic updates |
-| **Database** | **MongoDB Atlas & Mongoose** | Cloud NoSQL document storage with Mongoose ODM |
-| **Media Cloud** | **Cloudinary** | Image & file upload CDN streaming |
-| **Real-Time Engine** | **Socket.io-client** | WebSockets with automatic reconnection & fallback |
-| **Authentication** | **JWT & Bcrypt.js** | Stateless JSON Web Tokens & salted password hashing |
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Environment Variables](#environment-variables)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [API Endpoints](#api-endpoints)
+- [Deployment](#deployment)
+- [License](#license)
 
 ---
 
-## 💾 Data Storage: Where & How Data Is Stored
+## Overview
 
-### 1. MongoDB Atlas (Cloud NoSQL Database)
-All structured application data (users, credentials, message history, status ticks) is stored directly in **MongoDB Atlas** cloud cluster using Mongoose schemas.
+ZiChat is a production-ready messaging platform that delivers instant communication through WebSockets with automatic HTTP polling fallback. The application features optimistic UI updates for zero-latency message rendering, WhatsApp-style delivery ticks, live typing indicators, media sharing via Cloudinary CDN, and full profile customization.
 
-#### **User Model (`models/User.ts`)**:
-```ts
-{
-  name: String,        // Full name
-  email: String,       // Unique lowercase email address
-  username: String,    // Unique lowercase @username
-  password: String,    // Hashed password using bcrypt.js (salt 10)
-  bio: String,         // Custom profile bio (max 200 chars)
-  profilePhoto: String // Cloudinary CDN image URL
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-#### **Message Model (`models/Message.ts`)**:
-```ts
-{
-  senderId: String,   // User ID of the sender
-  receiverId: String, // User ID of the recipient
-  text: String,       // Message text content
-  mediaUrl: String,   // Cloudinary URL for image/video/file attachments
-  mediaType: String,  // 'image', 'video', 'audio', 'document'
-  fileName: String,   // Original filename for attachments
-  fileSize: Number,   // Attachment file size in bytes
-  status: String,     // 'sent' | 'delivered' | 'seen'
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-### 2. Cloudinary CDN (Media & Image Storage)
-- Media attachments (avatars, photo uploads, attachments) are sent directly to [`app/api/media/route.ts`](file:///Users/shanikumar/Desktop/Real-Time-Chat-Apllication/next-app/app/api/media/route.ts).
-- The API pipes the file buffer into **Cloudinary Upload Stream**, returning a permanent CDN HTTPS URL saved in MongoDB.
+The frontend and backend are unified in a single Next.js 16 application — client pages use React 19 with TanStack React Query for data management, while serverless API route handlers manage authentication, database operations, and media uploads.
 
 ---
 
-## ⚡ How Real-Time Messaging & WebSockets Work
+## Features
 
-1. **Socket Provider (`context/SocketContext.tsx`)**:
-   - Initialized at app root with `SocketProvider`.
-   - Listens for socket events: `userOnline`, `userOffline`, `typing`, `stopTyping`, and `newMessage`.
-   - Automatically handles reconnection gracefully with fallback to HTTP polling.
+### Authentication
+- **ZiName SSO** — Sign in using your ZiName (username) and password, authenticated against the ZiName identity service.
+- **Google OAuth** — One-click Google sign-in as an alternative login method.
+- **JWT Sessions** — Stateless authentication with JSON Web Tokens stored in the browser.
 
-2. **Optimistic UI & React Query Synchronization**:
-   - When a user sends a message, `useSendMessage` immediately appends the message object to the local query cache (`setQueryData`).
-   - The message renders on screen in **0ms** while the POST request is processed in the background.
+### Messaging
+- **Instant Delivery** — Messages render in 0ms using optimistic UI updates. The message appears on screen immediately while the POST request completes in the background.
+- **Delivery Status Ticks** — Three-state message tracking:
+  - Single tick — Message sent to the server.
+  - Double grey tick — Message delivered to the recipient.
+  - Double green tick — Recipient opened and read the conversation.
+- **Live Typing Indicators** — Animated bouncing dots appear when the other user is typing. Active typing conversations are automatically promoted to the top of the sidebar.
+- **Media Sharing** — Send images, videos, PDFs, and documents. Files are uploaded to Cloudinary CDN and streamed back as permanent HTTPS URLs.
 
-3. **Status Tick Transitions**:
-   - **`sent`**: Assigned upon creation.
-   - **`delivered`**: Automatically set when saved and routed to the receiver.
-   - **`seen`**: Updated in MongoDB Atlas when the recipient opens the chat or calls `useMarkMessagesRead`.
+### Chat Management
+- **User Search** — Find registered users by email or `@username` and start a direct conversation.
+- **Group Chats** — Create groups with a name, description, custom photo, and multiple members.
+- **Conversation Sorting** — Sort chats by latest message, unread count, or alphabetical order.
+- **Pin & Hide** — Pin important conversations to the top or hide chats you no longer need.
+- **Clear History** — Clear message history locally without affecting the other participant.
 
----
+### User Profile
+- **Custom Avatar** — Upload a profile photo via Cloudinary with instant preview.
+- **Editable Fields** — Update your full name, `@username`, and bio (up to 200 characters).
+- **Email Display** — View your linked email address (read-only).
 
-## 📂 Project Directory & File Structure
-
-```
-next-app/
-├── app/                        # Next.js App Router root
-│   ├── api/                    # Serverless API Route Handlers
-│   │   ├── auth/
-│   │   │   ├── login/          # POST /api/auth/login (JWT Auth & Bcrypt check)
-│   │   │   └── signup/         # POST /api/auth/signup (Direct 1-step registration)
-│   │   ├── media/              # POST /api/media (Cloudinary stream upload)
-│   │   ├── messages/
-│   │   │   ├── route.ts        # GET/POST /api/messages (Retrieve & send messages)
-│   │   │   ├── conversations/  # GET /api/messages/conversations (Active chat list)
-│   │   │   └── read/           # POST /api/messages/read (Mark messages as 'seen')
-│   │   ├── presence/
-│   │   │   └── check/          # POST /api/presence/check (Presence check)
-│   │   └── users/
-│   │       ├── profile/        # GET/PUT /api/users/profile (Profile bio/photo edit)
-│   │       ├── search/         # GET /api/users/search (Search user by email/username)
-│   │       └── [id]/           # GET /api/users/[id] (Public user profile lookup)
-│   ├── chat/
-│   │   └── page.tsx            # Main Chat Interface (Sidebar, Search, Messaging UI)
-│   ├── login/
-│   │   └── page.tsx            # Clean 1-Step Login Page
-│   ├── signup/
-│   │   └── page.tsx            # Clean 1-Step Signup Page
-│   ├── profile/
-│   │   └── page.tsx            # Profile Page (Edit photo, name, username, bio)
-│   ├── globals.css             # Design system styles, glassmorphic utilities
-│   ├── layout.tsx              # Root Layout wrapping Providers & Toaster
-│   └── page.tsx                # Landing redirect to /login or /chat
-├── context/
-│   ├── AuthContext.tsx         # JWT Auth State, LocalStorage & User session manager
-│   └── SocketContext.tsx       # Socket.io connection provider & event emitters
-├── hooks/
-│   ├── useQueries.ts           # TanStack React Query hooks (Search, Messages, Profile)
-│   └── useSocket.ts            # Custom socket hooks (Typing, Presence, Notifications)
-├── lib/
-│   ├── mongodb.ts              # Mongoose global connection cache manager
-│   └── utils.ts                # API Base normalizer & class merge utilities
-├── models/
-│   ├── User.ts                 # Mongoose schema for User accounts
-│   └── Message.ts              # Mongoose schema for Chat Messages
-├── public/                     # Static public assets
-├── .env.local                  # Environment configuration secrets
-├── next.config.ts              # Next.js configuration (allowedDevOrigins, Images)
-├── package.json                # Dependencies & script definitions
-└── tsconfig.json               # TypeScript path aliases (@/*)
-```
-
-### Breakdown of Key Components & Folders:
-
-- **`app/chat/page.tsx`**:
-  - The core chat interface. Contains the sidebar with **User Search**, **Conversations List**, **Typing Indicators**, **Status Ticks**, **Message Thread**, **Attachment Upload**, and 3-dot dropdown menus with **Log Out**.
-- **`app/profile/page.tsx`**:
-  - Allows users to change their profile picture via Cloudinary, edit their Full Name, update their @username, and write a custom Bio.
-- **`lib/mongodb.ts`**:
-  - Reuses Mongoose connections across serverless route invocations to prevent connection leaks during Next.js Hot Module Replacement (HMR).
-- **`hooks/useQueries.ts`**:
-  - Encapsulates all server communication using TanStack React Query hooks (`useMessages`, `useConversations`, `useSearchUsers`, `useSendMessage`).
+### Interface
+- **Dark & Light Themes** — Toggle between dark and light mode, persisted in local storage.
+- **Responsive Design** — Fully optimized for desktop, tablet, and mobile phones with safe-area support for notched devices.
+- **Glassmorphism UI** — Modern interface with backdrop blur, smooth gradients, and micro-animations.
+- **Toast Notifications** — Contextual success/error notifications via Sonner.
 
 ---
 
-## 🔑 Environment Variables Setup (`.env.local`)
+## Tech Stack
 
-Create a `.env.local` file in the root directory:
+| Layer | Technology | Purpose |
+|:---|:---|:---|
+| Frontend | Next.js 16 (App Router) | Server components, client hooks, Turbopack |
+| UI | React 19, Lucide Icons | Component rendering and icon system |
+| Styling | Tailwind CSS 4, Vanilla CSS | Design system, glassmorphism, responsive layout |
+| Data | TanStack React Query v5 | Caching, background polling, optimistic updates |
+| Database | MongoDB Atlas, Mongoose 9 | Cloud NoSQL document storage |
+| Media | Cloudinary | Image and file upload CDN |
+| Real-Time | Socket.io-client | WebSockets with automatic reconnection |
+| Auth | JWT, Bcrypt.js | Stateless tokens, salted password hashing |
+| Notifications | Sonner | Toast notification system |
+
+---
+
+## Environment Variables
+
+Create a `.env.local` file in the project root:
 
 ```env
-# API Base Route
+# API Base URL (for client-side fetch calls)
 NEXT_PUBLIC_API_URL=/api
 
-# JWT Secret
-JWT_SECRET=ziurochat_secret_key_2026
+# Socket.io Server URL
+NEXT_PUBLIC_SOCKET_URL=https://your-socket-server.onrender.com
 
-# MongoDB Atlas Database URI
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/ziurochat?retryWrites=true&w=majority
+# JWT Secret Key
+JWT_SECRET=your_jwt_secret_key
 
-# Cloudinary Storage Configuration
+# MongoDB Atlas Connection URI
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/zichat?retryWrites=true&w=majority
+
+# Cloudinary Configuration
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-username/ziurochat.git
-   cd next-app
-   ```
+### Prerequisites
 
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+- Node.js 18+ installed
+- MongoDB Atlas cluster configured
+- Cloudinary account created
 
-3. **Run the development server**:
-   ```bash
-   npm run dev
-   ```
+### Installation
 
-4. **Open in browser**:
-   Navigate to [http://localhost:3000](http://localhost:3000).
+```bash
+# Clone the repository
+git clone https://github.com/shanikumar001/ZiChat.git
+cd next-app
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.local.example .env.local
+# Edit .env.local with your credentials
+
+# Start the development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Available Scripts
+
+| Command | Description |
+|:---|:---|
+| `npm run dev` | Start development server with Webpack |
+| `npm run build` | Create production build |
+| `npm start` | Start production server |
+| `npm run lint` | Run ESLint checks |
 
 ---
 
-## 📜 License
+## Project Structure
+
+```
+next-app/
+├── app/
+│   ├── api/                         # Serverless API route handlers
+│   │   ├── auth/
+│   │   │   ├── login/               # POST — JWT authentication
+│   │   │   └── signup/              # POST — User registration
+│   │   ├── media/                   # POST — Cloudinary file upload
+│   │   ├── messages/
+│   │   │   ├── route.ts             # GET/POST — Retrieve and send messages
+│   │   │   ├── conversations/       # GET — Active conversation list
+│   │   │   └── read/                # POST — Mark messages as seen
+│   │   ├── groups/                  # POST — Create group, GET/PUT group details
+│   │   ├── presence/
+│   │   │   └── check/               # POST — User online status check
+│   │   └── users/
+│   │       ├── profile/             # GET/PUT — Edit user profile
+│   │       ├── search/              # GET — Search by email or username
+│   │       └── [id]/                # GET — Public user profile lookup
+│   ├── chat/page.tsx                # Main chat interface
+│   ├── login/page.tsx               # Login page
+│   ├── signup/page.tsx              # Signup redirect
+│   ├── profile/page.tsx             # Profile editor
+│   ├── globals.css                  # Design system and utilities
+│   ├── layout.tsx                   # Root layout with providers
+│   └── page.tsx                     # Entry redirect (login or chat)
+├── context/
+│   ├── AuthContext.tsx               # JWT auth state and session management
+│   └── SocketContext.tsx             # Socket.io connection and event handling
+├── hooks/
+│   ├── useQueries.ts                # React Query hooks for all data operations
+│   └── useSocket.ts                 # Socket hooks for typing, presence, notifications
+├── lib/
+│   ├── mongodb.ts                   # Mongoose connection cache (prevents HMR leaks)
+│   └── utils.ts                     # API base URL helper and utilities
+├── models/
+│   ├── User.ts                      # Mongoose user schema
+│   └── Message.ts                   # Mongoose message schema
+├── public/                          # Static assets (logo, favicon)
+├── .env.local                       # Environment secrets (not committed)
+├── next.config.ts                   # Next.js configuration
+├── package.json                     # Dependencies and scripts
+└── tsconfig.json                    # TypeScript configuration
+```
+
+---
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| POST | `/api/auth/signup` | Register a new user |
+| POST | `/api/auth/login` | Authenticate and receive JWT |
+
+### Messages
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| GET | `/api/messages?userId=<id>` | Retrieve messages with a user |
+| POST | `/api/messages` | Send a new message |
+| GET | `/api/messages/conversations` | List all active conversations |
+| POST | `/api/messages/read` | Mark messages as seen |
+
+### Users
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| GET | `/api/users/search?q=<query>` | Search users by email or username |
+| GET | `/api/users/<id>` | Get public user profile |
+| GET | `/api/users/profile` | Get own profile |
+| PUT | `/api/users/profile` | Update own profile |
+
+### Groups
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| POST | `/api/groups` | Create a new group |
+| GET | `/api/groups/<id>` | Get group details |
+| PUT | `/api/groups/<id>` | Update group info |
+
+### Media & Presence
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| POST | `/api/media` | Upload file to Cloudinary |
+| POST | `/api/presence/check` | Check online status of users |
+
+---
+
+## Deployment
+
+ZiChat is deployed on **Render** with the following configuration:
+
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+- **Environment**: Node.js (auto-detected)
+- **Environment Variables**: Set all `.env.local` values in the Render dashboard.
+
+The Socket.io real-time server is deployed separately and connected via the `NEXT_PUBLIC_SOCKET_URL` environment variable.
+
+---
+
+## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
