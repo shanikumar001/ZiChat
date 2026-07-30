@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",
+    "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
     "docx": "^9.7.1",

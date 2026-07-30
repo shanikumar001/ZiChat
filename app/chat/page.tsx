@@ -381,16 +381,6 @@ function ChatPageContent() {
 
   return (
     <main className="flex flex-col h-dvh max-w-6xl mx-auto px-0 sm:px-4 py-0 sm:py-2">
-      {/* Top bar */}
-      {/* <div className="flex items-center justify-between px-4 py-2 mb-2 rounded-xl bg-card border border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-            <User className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-lg">ZiChat</span>
-        </div>
-
-      </div> */}
 
       <div className="flex flex-1 min-h-0 border-0 sm:border border-border rounded-none sm:rounded-xl overflow-hidden bg-card shadow-xl">
         {/* Sidebar */}
@@ -411,14 +401,7 @@ function ChatPageContent() {
                 </div>
                 <span className="text-xs font-semibold">{user.name}</span>
               </Link>
-              {/* <button
-                onClick={() => setShowCreateGroupModal(true)}
-                className="p-2 px-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-all flex items-center gap-1.5 cursor-pointer text-xs font-semibold"
-                title="Create Group"
-              >
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">New Group</span>
-              </button> */}
+              
             </div>
             {/* Sort menu */}
             <div className="relative">

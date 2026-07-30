@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import Message from '@/models/Message';
 import jwt from 'jsonwebtoken';
 
@@ -27,21 +29,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: 'withUserId is required' }, { status: 400 });
     }
 
-    let dbConnected = false;
-    try {
-      await connectToDatabase();
-      dbConnected = true;
-    } catch {
-      dbConnected = false;
-    }
-
-    if (dbConnected) {
-      // Mark all messages from withUserId to currentUserId as 'seen'
-      await Message.updateMany(
+    // Mark all messages from withUserId to currentUserId as 'seen'
+    await withFallback(
+      () => ziurodb.updateMany('messages',
         { senderId: withUserId, receiverId: currentUserId, status: { $ne: 'seen' } },
         { $set: { status: 'seen' } }
-      );
-    }
+      ),
+      async () => {
+        await connectToDatabase();
+        return Message.updateMany(
+          { senderId: withUserId, receiverId: currentUserId, status: { $ne: 'seen' } },
+          { $set: { status: 'seen' } }
+        );
+      },
+      'markRead'
+    );
 
     return NextResponse.json({ success: true, message: 'Messages marked as read' });
   } catch (error) {

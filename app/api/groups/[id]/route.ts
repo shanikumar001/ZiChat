@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import Group from '@/models/Group';
 import User from '@/models/User';
 import mongoose from 'mongoose';
@@ -8,35 +10,56 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const { id } = await params;
 
-    await connectToDatabase();
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid Group ID' }, { status: 400 });
     }
 
-    const group = await Group.findById(id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const group: any = await withFallback(
+      () => ziurodb.findById('groups', id),
+      async () => {
+        await connectToDatabase();
+        return Group.findById(id);
+      },
+      'groupDetail:get'
+    );
+
     if (!group) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 });
     }
 
-    // Fetch details of all members
-    const memberObjects = await User.find({ _id: { $in: group.members } }).select('_id name username profilePhoto email');
+    const members = (group.members as string[]) || [];
+
+    // Fetch member details
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const memberObjects = await withFallback<any[]>(
+      () => ziurodb.find('users', { _id: { $in: members } }),
+      async () => {
+        await connectToDatabase();
+        return User.find({ _id: { $in: members } }).select('_id name username profilePhoto email');
+      },
+      'groupDetail:getMembers'
+    );
+
+    const gId = (group._id?.toString?.() || group._id || group.id) as string;
+    const createdAt = group.createdAt instanceof Date ? group.createdAt.toISOString() : group.createdAt as string;
 
     return NextResponse.json({
-      id: group._id.toString(),
+      id: gId,
       name: group.name,
       description: group.description || '',
       icon: group.icon || '',
       isGroup: true,
       creatorId: group.creatorId,
-      memberCount: group.members.length,
-      members: memberObjects.map((u) => ({
-        id: u._id.toString(),
+      memberCount: members.length,
+      members: memberObjects.map((u: Record<string, unknown>) => ({
+        id: (u._id?.toString?.() || u._id || u.id) as string,
         name: u.name,
         username: u.username,
         profilePhoto: u.profilePhoto,
         email: u.email,
       })),
-      createdAt: group.createdAt.toISOString(),
+      createdAt,
     });
   } catch (error) {
     console.error('Group detail GET error:', error);
@@ -50,31 +73,51 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const body = await req.json();
     const { name, description, icon } = body;
 
-    await connectToDatabase();
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid Group ID' }, { status: 400 });
     }
 
-    const group = await Group.findById(id);
-    if (!group) {
+    const updateFields: Record<string, unknown> = {};
+    if (name && name.trim()) updateFields.name = name.trim();
+    if (description !== undefined) updateFields.description = description.trim();
+    if (icon !== undefined) updateFields.icon = icon;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedGroup: any = await withFallback(
+      async () => {
+        await ziurodb.updateOne('groups', { _id: `ObjectId("${id}")` }, { $set: updateFields });
+        return ziurodb.findById('groups', id);
+      },
+      async () => {
+        await connectToDatabase();
+        const group = await Group.findById(id);
+        if (!group) return null;
+        if (updateFields.name) group.name = updateFields.name as string;
+        if (updateFields.description !== undefined) group.description = updateFields.description as string;
+        if (updateFields.icon !== undefined) group.icon = updateFields.icon as string;
+        await group.save();
+        return group;
+      },
+      'groupDetail:update'
+    );
+
+    if (!updatedGroup) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 });
     }
 
-    if (name && name.trim()) group.name = name.trim();
-    if (description !== undefined) group.description = description.trim();
-    if (icon !== undefined) group.icon = icon;
-
-    await group.save();
+    const gId = (updatedGroup._id?.toString?.() || updatedGroup._id || updatedGroup.id) as string;
+    const members = (updatedGroup.members as string[]) || [];
+    const createdAt = updatedGroup.createdAt instanceof Date ? updatedGroup.createdAt.toISOString() : updatedGroup.createdAt as string;
 
     return NextResponse.json({
-      id: group._id.toString(),
-      name: group.name,
-      description: group.description || '',
-      icon: group.icon || '',
+      id: gId,
+      name: updatedGroup.name,
+      description: updatedGroup.description || '',
+      icon: updatedGroup.icon || '',
       isGroup: true,
-      creatorId: group.creatorId,
-      memberCount: group.members.length,
-      createdAt: group.createdAt.toISOString(),
+      creatorId: updatedGroup.creatorId,
+      memberCount: members.length,
+      createdAt,
     });
   } catch (error) {
     console.error('Group PUT error:', error);

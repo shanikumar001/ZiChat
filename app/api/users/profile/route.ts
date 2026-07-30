@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import User from '@/models/User';
 import jwt from 'jsonwebtoken';
 
@@ -24,15 +26,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await connectToDatabase();
-    const user = await User.findById(currentUserId).select('_id name username email bio profilePhoto');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const user: any = await withFallback(
+      () => ziurodb.findById('users', currentUserId),
+      async () => {
+        await connectToDatabase();
+        return User.findById(currentUserId).select('_id name username email bio profilePhoto');
+      },
+      'profile:get'
+    );
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({
-      id: user._id.toString(),
+      id: (user._id?.toString?.() || user._id || user.id) as string,
       name: user.name,
       username: user.username,
       email: user.email,
@@ -67,30 +76,59 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Username must be at least 3 characters' }, { status: 400 });
     }
 
-    await connectToDatabase();
-
     // Check if username is taken by another user
-    const existing = await User.findOne({
-      username: trimmedUsername,
-      _id: { $ne: currentUserId },
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing: any = await withFallback(
+      async () => {
+        const result = await ziurodb.query(
+          `db.users.findOne({ username: "${trimmedUsername}", _id: { $ne: ObjectId("${currentUserId}") } })`
+        );
+        return result.data;
+      },
+      async () => {
+        await connectToDatabase();
+        return User.findOne({
+          username: trimmedUsername,
+          _id: { $ne: currentUserId },
+        });
+      },
+      'profile:checkUsername'
+    );
 
     if (existing) {
       return NextResponse.json({ error: 'Username is already taken by another user' }, { status: 400 });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      currentUserId,
-      {
-        $set: {
-          name: trimmedName,
-          username: trimmedUsername,
-          bio: trimmedBio,
-          ...(profilePhoto !== undefined ? { profilePhoto } : {}),
-        },
+    // Update user profile
+    const updateFields: Record<string, unknown> = {
+      name: trimmedName,
+      username: trimmedUsername,
+      bio: trimmedBio,
+    };
+    if (profilePhoto !== undefined) {
+      updateFields.profilePhoto = profilePhoto;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedUser: any = await withFallback(
+      async () => {
+        await ziurodb.updateOne('users',
+          { _id: `ObjectId("${currentUserId}")` },
+          { $set: updateFields }
+        );
+        // Re-fetch to return the updated user
+        return ziurodb.findById('users', currentUserId);
       },
-      { new: true }
-    ).select('_id name username email bio profilePhoto');
+      async () => {
+        await connectToDatabase();
+        return User.findByIdAndUpdate(
+          currentUserId,
+          { $set: updateFields },
+          { new: true }
+        ).select('_id name username email bio profilePhoto');
+      },
+      'profile:update'
+    );
 
     if (!updatedUser) {
       return NextResponse.json({ error: 'User update failed' }, { status: 404 });
@@ -98,7 +136,7 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({
       user: {
-        id: updatedUser._id.toString(),
+        id: (updatedUser._id?.toString?.() || updatedUser._id || updatedUser.id) as string,
         name: updatedUser.name,
         username: updatedUser.username,
         email: updatedUser.email,

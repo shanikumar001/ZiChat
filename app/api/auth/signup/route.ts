@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'zichat_secret_key_2026';
-
-// In-memory fallback if MongoDB Atlas is not yet connected
-const fallbackUsers: Array<{ id: string; name: string; email: string; username: string; password?: string }> = [];
 
 export async function POST(req: Request) {
   try {
@@ -22,77 +21,69 @@ export async function POST(req: Request) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanName = name.trim();
 
-    // Connect to MongoDB Atlas
-    let dbConnected = false;
-    try {
-      await connectToDatabase();
-      dbConnected = true;
-    } catch {
-      dbConnected = false;
+    // Check if user already exists
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existingUser: any = await withFallback(
+      () => ziurodb.findOne('users', {
+        $or: [{ email: cleanEmail }, { username: cleanUsername }],
+      }),
+      async () => {
+        await connectToDatabase();
+        return User.findOne({
+          $or: [{ email: cleanEmail }, { username: cleanUsername }],
+        });
+      },
+      'signup:checkExisting'
+    );
+
+    if (existingUser) {
+      return NextResponse.json({ error: 'User with this email or username already exists' }, { status: 400 });
     }
 
-    if (dbConnected) {
-      // MongoDB Atlas signup
-      const existingUser = await User.findOne({
-        $or: [{ email: cleanEmail }, { username: cleanUsername }],
-      });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const profilePhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanUsername)}`;
 
-      if (existingUser) {
-        return NextResponse.json({ error: 'User with this email or username already exists' }, { status: 400 });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      const profilePhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanUsername)}`;
-
-      const newUser = await User.create({
+    // Create new user
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newUser: any = await withFallback(
+      () => ziurodb.insertOne('users', {
         name: cleanName,
         email: cleanEmail,
         username: cleanUsername,
         password: hashedPassword,
+        bio: '',
         profilePhoto,
-      });
+      }),
+      async () => {
+        await connectToDatabase();
+        return User.create({
+          name: cleanName,
+          email: cleanEmail,
+          username: cleanUsername,
+          password: hashedPassword,
+          profilePhoto,
+        });
+      },
+      'signup:createUser'
+    );
 
-      const token = jwt.sign(
-        { id: newUser._id.toString(), email: newUser.email, username: newUser.username },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      return NextResponse.json({
-        token,
-        user: {
-          id: newUser._id.toString(),
-          name: newUser.name,
-          email: newUser.email,
-          username: newUser.username,
-          profilePhoto: newUser.profilePhoto,
-        },
-        message: 'Signup successful (MongoDB Atlas)',
-      });
-    }
-
-    // Dev Fallback when MONGODB_URI is not connected
-    const existing = fallbackUsers.find(u => u.email === cleanEmail || u.username === cleanUsername);
-    if (existing) {
-      return NextResponse.json({ error: 'User with this email or username already exists' }, { status: 400 });
-    }
-
-    const newUserObj = {
-      id: `user_${Date.now()}`,
-      name: cleanName,
-      email: cleanEmail,
-      username: cleanUsername,
-      profilePhoto: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanUsername)}`,
-    };
-
-    fallbackUsers.push({ ...newUserObj, password });
-    const token = jwt.sign({ id: newUserObj.id, email: cleanEmail }, JWT_SECRET, { expiresIn: '7d' });
+    const userId = (newUser._id?.toString?.() || newUser._id || newUser.id) as string;
+    const token = jwt.sign(
+      { id: userId, email: cleanEmail, username: cleanUsername },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     return NextResponse.json({
       token,
-      user: newUserObj,
+      user: {
+        id: userId,
+        name: cleanName,
+        email: cleanEmail,
+        username: cleanUsername,
+        profilePhoto: newUser.profilePhoto || profilePhoto,
+      },
       message: 'Signup successful',
     });
   } catch (error) {

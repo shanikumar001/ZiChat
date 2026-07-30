@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import Group from '@/models/Group';
-import User from '@/models/User';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'zichat_secret_key_2026';
@@ -25,20 +26,32 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
-    await connectToDatabase();
-    const groups = await Group.find({ members: currentUserId }).sort({ updatedAt: -1 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const groups = await withFallback<any[]>(
+      () => ziurodb.find('groups', { members: currentUserId }, { sort: { updatedAt: -1 } }),
+      async () => {
+        await connectToDatabase();
+        return Group.find({ members: currentUserId }).sort({ updatedAt: -1 });
+      },
+      'groups:list'
+    );
 
-    const formatted = groups.map((g) => ({
-      id: g._id.toString(),
-      name: g.name,
-      description: g.description || '',
-      icon: g.icon || '',
-      isGroup: true,
-      creatorId: g.creatorId,
-      memberCount: g.members.length,
-      members: g.members,
-      createdAt: g.createdAt.toISOString(),
-    }));
+    const formatted = groups.map((g: Record<string, unknown>) => {
+      const gId = (g._id?.toString?.() || g._id || g.id) as string;
+      const members = (g.members as string[]) || [];
+      const createdAt = g.createdAt instanceof Date ? g.createdAt.toISOString() : g.createdAt as string;
+      return {
+        id: gId,
+        name: g.name,
+        description: (g.description as string) || '',
+        icon: (g.icon as string) || '',
+        isGroup: true,
+        creatorId: g.creatorId,
+        memberCount: members.length,
+        members,
+        createdAt,
+      };
+    });
 
     return NextResponse.json(formatted);
   } catch (error) {
@@ -61,31 +74,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Group name is required' }, { status: 400 });
     }
 
-    await connectToDatabase();
-
-    // Combine current user ID with selected member IDs
     const membersSet = new Set<string>([currentUserId, ...(Array.isArray(memberIds) ? memberIds : [])]);
     const membersList = Array.from(membersSet);
 
-    const newGroup = await Group.create({
+    const groupDoc = {
       name: name.trim(),
       description: description?.trim() || '',
       icon: icon || '',
       creatorId: currentUserId,
       members: membersList,
       adminIds: [currentUserId],
-    });
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newGroup: any = await withFallback(
+      () => ziurodb.insertOne('groups', groupDoc),
+      async () => {
+        await connectToDatabase();
+        return Group.create(groupDoc);
+      },
+      'groups:create'
+    );
+
+    const gId = (newGroup._id?.toString?.() || newGroup._id || newGroup.id) as string;
+    const createdAt = newGroup.createdAt instanceof Date ? newGroup.createdAt.toISOString() : newGroup.createdAt || new Date().toISOString();
 
     return NextResponse.json({
-      id: newGroup._id.toString(),
-      name: newGroup.name,
-      description: newGroup.description,
-      icon: newGroup.icon,
+      id: gId,
+      name: newGroup.name || name.trim(),
+      description: newGroup.description || description?.trim() || '',
+      icon: newGroup.icon || icon || '',
       isGroup: true,
-      creatorId: newGroup.creatorId,
-      memberCount: newGroup.members.length,
-      members: newGroup.members,
-      createdAt: newGroup.createdAt.toISOString(),
+      creatorId: currentUserId,
+      memberCount: membersList.length,
+      members: membersList,
+      createdAt,
     });
   } catch (error) {
     console.error('Groups POST error:', error);

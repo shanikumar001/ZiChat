@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { withFallback } from '@/lib/db';
+import * as ziurodb from '@/lib/ziurodb';
 import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -33,69 +35,94 @@ export async function POST(req: Request) {
         }, { status: 401 });
       }
 
-      // Connect to next-app's MongoDB database
-      let dbConnected = false;
-      try {
-        await connectToDatabase();
-        dbConnected = true;
-      } catch (err) {
-        console.error('Failed to connect to database:', err);
-      }
-
       const verifiedUser = zinameData.user;
 
-      if (dbConnected) {
-        // Find existing user or create a new one based on ZiName user details
-        let dbUser = await User.findOne({ username: verifiedUser.ziName });
+      // 2. Find or create user in our database (ZiuroDB primary, MongoDB Atlas fallback)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let dbUser: any = await withFallback(
+        // ZiuroDB: find user by username
+        () => ziurodb.findOne('users', { username: verifiedUser.ziName }),
+        // Mongoose fallback
+        async () => {
+          await connectToDatabase();
+          return User.findOne({ username: verifiedUser.ziName });
+        },
+        'login:findUser'
+      );
 
-        if (!dbUser) {
-          // Auto-provision user in next-app's database
-          // Since email is required and unique, generate a placeholder email
-          const placeholderEmail = `${verifiedUser.ziName}@ziuro.com`;
-          
-          // Verify placeholder email uniqueness, if taken add a timestamp
-          let finalEmail = placeholderEmail;
-          const emailExists = await User.findOne({ email: finalEmail });
-          if (emailExists) {
-            finalEmail = `${verifiedUser.ziName}_${Date.now()}@ziuro.com`;
-          }
+      if (!dbUser) {
+        // Auto-provision user in our database
+        const placeholderEmail = `${verifiedUser.ziName}@ziuro.com`;
 
-          dbUser = await User.create({
+        // Check email uniqueness
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const emailExists: any = await withFallback(
+          () => ziurodb.findOne('users', { email: placeholderEmail }),
+          async () => {
+            await connectToDatabase();
+            return User.findOne({ email: placeholderEmail });
+          },
+          'login:checkEmail'
+        );
+
+        const finalEmail = emailExists ? `${verifiedUser.ziName}_${Date.now()}@ziuro.com` : placeholderEmail;
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        dbUser = await withFallback(
+          // ZiuroDB: insert new user
+          () => ziurodb.insertOne('users', {
             name: verifiedUser.fullName,
             username: verifiedUser.ziName,
             email: finalEmail,
-            password: await bcrypt.hash(password, 10), // Save encrypted password locally for backup
+            password: hashedPassword,
+            bio: '',
             profilePhoto: verifiedUser.profilePhoto || '',
-          });
-        } else {
-          // Sync profile info with main ZiName identity profile
-          dbUser.name = verifiedUser.fullName;
-          dbUser.profilePhoto = verifiedUser.profilePhoto || '';
-          await dbUser.save();
-        }
-
-        const token = jwt.sign(
-          { id: dbUser._id.toString(), email: dbUser.email, username: dbUser.username },
-          JWT_SECRET,
-          { expiresIn: '7d' }
+          }),
+          // Mongoose fallback
+          async () => {
+            await connectToDatabase();
+            return User.create({
+              name: verifiedUser.fullName,
+              username: verifiedUser.ziName,
+              email: finalEmail,
+              password: hashedPassword,
+              profilePhoto: verifiedUser.profilePhoto || '',
+            });
+          },
+          'login:createUser'
+        );
+      } else {
+        // Sync profile info from ZiName
+        await withFallback(
+          () => ziurodb.updateOne('users', { username: verifiedUser.ziName }, {
+            $set: {
+              name: verifiedUser.fullName,
+              profilePhoto: verifiedUser.profilePhoto || '',
+            },
+          }),
+          async () => {
+            await connectToDatabase();
+            const user = await User.findOne({ username: verifiedUser.ziName });
+            if (user) {
+              user.name = verifiedUser.fullName;
+              user.profilePhoto = verifiedUser.profilePhoto || '';
+              await user.save();
+            }
+            return user;
+          },
+          'login:syncProfile'
         );
 
-        return NextResponse.json({
-          token,
-          user: {
-            id: dbUser._id.toString(),
-            name: dbUser.name,
-            email: dbUser.email,
-            username: dbUser.username,
-            profilePhoto: dbUser.profilePhoto,
-          },
-          message: 'Login successful via ZiName',
-        });
+        // Re-fetch to get latest data
+        if (!dbUser.name || dbUser.name !== verifiedUser.fullName) {
+          dbUser.name = verifiedUser.fullName;
+          dbUser.profilePhoto = verifiedUser.profilePhoto || '';
+        }
       }
 
-      // Dev fallback: in case database is down, return the user info from ZiName directly
+      const userId = dbUser._id?.toString?.() || dbUser._id || dbUser.id;
       const token = jwt.sign(
-        { id: verifiedUser._id, email: `${verifiedUser.ziName}@ziuro.com`, username: verifiedUser.ziName },
+        { id: userId, email: dbUser.email, username: dbUser.username },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -103,13 +130,13 @@ export async function POST(req: Request) {
       return NextResponse.json({
         token,
         user: {
-          id: verifiedUser._id,
-          name: verifiedUser.fullName,
-          email: `${verifiedUser.ziName}@ziuro.com`,
-          username: verifiedUser.ziName,
-          profilePhoto: verifiedUser.profilePhoto,
+          id: userId,
+          name: dbUser.name,
+          email: dbUser.email,
+          username: dbUser.username,
+          profilePhoto: dbUser.profilePhoto,
         },
-        message: 'Login successful (Dev Fallback)',
+        message: 'Login successful via ZiName',
       });
 
     } catch (authErr) {
