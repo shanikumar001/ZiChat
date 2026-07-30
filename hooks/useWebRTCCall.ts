@@ -430,13 +430,8 @@ export function useWebRTCCall() {
         pc.addTrack(track, stream);
       });
 
-      if (pc.signalingState !== 'stable') {
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
-        } catch (err) {
-          console.warn('Ignored duplicate remote offer SDP set:', err);
-        }
-      }
+      // Set remote offer SDP (required before createAnswer)
+      await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -450,8 +445,10 @@ export function useWebRTCCall() {
           setCallDuration((prev) => prev + 1);
         }, 1000);
       }
-    } catch {
-      toast.error('Failed to connect call media');
+    } catch (err: unknown) {
+      console.error('Failed to connect call media error:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to connect call media';
+      toast.error(msg);
       cleanupCall();
     }
   }, [callerInfo, stopTones, getMedia, callType, createPeerConnection, emitSignal, cleanupCall]);
