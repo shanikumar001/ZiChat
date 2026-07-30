@@ -11,6 +11,7 @@ interface SocketContextType {
   emitEvent: (event: string, data?: unknown) => void;
 }
 
+// teset : 
 const SocketContext = createContext<SocketContextType | null>(null);
 
 function getSocketUrl(): string {
