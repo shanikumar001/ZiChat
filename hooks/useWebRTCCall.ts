@@ -209,22 +209,85 @@ export function useWebRTCCall() {
   }, [localStream, remoteStream, stopTones]);
 
   // ----------------------------------------------------
-  // Helper: Get User Media Stream
+  // Helper: Get User Media Stream (with Mobile Fallbacks)
   // ----------------------------------------------------
   const getMedia = useCallback(async (type: CallType) => {
-    try {
-      const constraints: MediaStreamConstraints = {
-        audio: true,
-        video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setLocalStream(stream);
-      return stream;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Camera/Microphone permission denied';
-      toast.error(errorMsg);
-      throw err;
+    // 1. Mobile HTTPS / Secure Context Check
+    if (typeof window !== 'undefined') {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!window.isSecureContext && !isLocalhost) {
+        const msg = 'Camera and microphone access requires HTTPS on mobile browsers. Please open ZiChat via an https:// link.';
+        toast.error(msg, { duration: 6000 });
+        throw new Error(msg);
+      }
     }
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      const msg = 'Your browser or device does not support audio/video calling.';
+      toast.error(msg, { duration: 6000 });
+      throw new Error(msg);
+    }
+
+    // 2. Mobile Constraint Fallback Attempts
+    const constraintList: MediaStreamConstraints[] = [];
+
+    if (type === 'video') {
+      // Primary: Mobile front camera preference
+      constraintList.push({
+        audio: true,
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      // Fallback 1: Generic video + audio
+      constraintList.push({
+        audio: true,
+        video: { facingMode: 'user' },
+      });
+      // Fallback 2: Basic video + audio
+      constraintList.push({
+        audio: true,
+        video: true,
+      });
+    }
+
+    // Final fallback: Audio only
+    constraintList.push({ audio: true });
+
+    let lastError: unknown = null;
+
+    for (const constraints of constraintList) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setLocalStream(stream);
+        if (type === 'video' && !constraints.video) {
+          setIsVideoOff(true);
+          toast.info('Camera unavailable. Switched to Audio call mode.');
+        }
+        return stream;
+      } catch (err: unknown) {
+        lastError = err;
+        // If user explicitly denied permission, don't keep trying higher constraints
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+          break;
+        }
+      }
+    }
+
+    // 3. User-friendly Permission Denied Error
+    if (lastError instanceof DOMException) {
+      if (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError') {
+        const permMsg = 'Camera/Microphone permission denied. Please allow camera and mic permissions in your phone browser site settings.';
+        toast.error(permMsg, { duration: 7000 });
+        throw new Error(permMsg);
+      } else if (lastError.name === 'NotFoundError' || lastError.name === 'DevicesNotFoundError') {
+        const devMsg = 'No camera or microphone found on your device.';
+        toast.error(devMsg);
+        throw new Error(devMsg);
+      }
+    }
+
+    const errorMsg = lastError instanceof Error ? lastError.message : 'Camera/Microphone permission error';
+    toast.error(errorMsg);
+    throw lastError || new Error(errorMsg);
   }, []);
 
   // ----------------------------------------------------
