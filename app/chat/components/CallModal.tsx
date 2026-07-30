@@ -199,7 +199,14 @@ export function CallModal({
               <div className="relative w-full h-full bg-slate-950 flex items-center justify-center">
                 {callType === 'video' && !remoteVideoOff && remoteStream ? (
                   <video
-                    ref={remoteVideoRef}
+                    ref={(node) => {
+                      if (node && remoteStream) {
+                        if (node.srcObject !== remoteStream) {
+                          node.srcObject = remoteStream;
+                        }
+                        node.play().catch(() => {});
+                      }
+                    }}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"
@@ -238,7 +245,14 @@ export function CallModal({
               <div className="absolute top-16 right-4 sm:top-20 sm:right-6 w-32 h-44 sm:w-44 sm:h-60 rounded-2xl overflow-hidden border-2 border-slate-700/80 bg-slate-900 shadow-2xl z-30 transition-all hover:scale-105">
                 {callType === 'video' && !isVideoOff && localStream ? (
                   <video
-                    ref={localVideoRef}
+                    ref={(node) => {
+                      if (node && localStream) {
+                        if (node.srcObject !== localStream) {
+                          node.srcObject = localStream;
+                        }
+                        node.play().catch(() => {});
+                      }
+                    }}
                     autoPlay
                     playsInline
                     muted

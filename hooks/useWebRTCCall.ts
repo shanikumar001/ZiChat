@@ -54,6 +54,7 @@ export function useWebRTCCall() {
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   // Initialize BroadcastChannel fallback for multi-tab / local testing
   useEffect(() => {
@@ -440,6 +441,19 @@ export function useWebRTCCall() {
 
       // Set remote offer SDP (required before createAnswer)
       await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
+
+      // Flush queued ICE candidates
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const cand = pendingIceCandidatesRef.current.shift();
+        if (cand && pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(cand));
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -617,6 +631,19 @@ export function useWebRTCCall() {
           console.warn('Ignored duplicate remote answer SDP:', err);
         }
       }
+
+      // Flush queued ICE candidates
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const cand = pendingIceCandidatesRef.current.shift();
+        if (cand && pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(cand));
+          } catch {
+            // ignore candidate error
+          }
+        }
+      }
+
       setCallState('connected');
       if (!callTimerRef.current) {
         setCallDuration(0);
@@ -631,11 +658,16 @@ export function useWebRTCCall() {
   const processIceCandidate = useCallback(async (data: any) => {
     if (!checkIsTargetingMe(data.to)) return;
 
-    if (peerConnectionRef.current && data.candidate) {
-      try {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } catch {
-        // Candidate error ignore
+    const pc = peerConnectionRef.current;
+    if (pc && data.candidate) {
+      if (pc.remoteDescription) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch {
+          // Candidate error ignore
+        }
+      } else {
+        pendingIceCandidatesRef.current.push(data.candidate);
       }
     }
   }, [checkIsTargetingMe]);
