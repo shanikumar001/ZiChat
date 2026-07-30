@@ -430,7 +430,13 @@ export function useWebRTCCall() {
         pc.addTrack(track, stream);
       });
 
-      await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
+      if (pc.signalingState !== 'stable') {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current));
+        } catch (err) {
+          console.warn('Ignored duplicate remote offer SDP set:', err);
+        }
+      }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -597,8 +603,15 @@ export function useWebRTCCall() {
     if (!checkIsTargetingMe(data.to)) return;
 
     stopTones();
-    if (peerConnectionRef.current && data.answer) {
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+    const pc = peerConnectionRef.current;
+    if (pc && data.answer) {
+      if (pc.signalingState === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } catch (err) {
+          console.warn('Ignored duplicate remote answer SDP:', err);
+        }
+      }
       setCallState('connected');
       if (!callTimerRef.current) {
         setCallDuration(0);
