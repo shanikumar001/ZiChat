@@ -410,6 +410,14 @@ export function useWebRTCCall() {
         callType: type,
         callerInfo: callerData,
       });
+
+      // Auto cancel call if unanswered after 25s
+      setTimeout(() => {
+        if (callStateRef.current === 'calling') {
+          toast.info(`${userToCall.name || 'User'} is offline or unavailable.`);
+          cleanupCall();
+        }
+      }, 25000);
     } catch {
       cleanupCall();
     }

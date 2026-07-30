@@ -207,6 +207,21 @@ function ChatPageContent() {
 
   const isOtherUserOnline = userId ? (onlineUsers.has(userId) || !!(presenceMap as Record<string, unknown>)[userId]) : false;
 
+  // Send active presence heartbeat every 10s
+  useEffect(() => {
+    if (!user?.id) return;
+    const sendHeartbeat = () => {
+      fetch('/api/presence/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      }).catch(() => {});
+    };
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -697,7 +712,11 @@ function ChatPageContent() {
                       {!displayUser.isGroup && (
                         <>
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              if (!isOtherUserOnline) {
+                                toast.error(`${displayUser.name || 'User'} is offline.`);
+                                return;
+                              }
                               call.startCall(
                                 {
                                   id: displayUser.id,
@@ -706,8 +725,8 @@ function ChatPageContent() {
                                   avatar: displayUser.profilePhoto,
                                 },
                                 'audio'
-                              )
-                            }
+                              );
+                            }}
                             className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors cursor-pointer"
                             title="Voice Call"
                           >
@@ -715,7 +734,11 @@ function ChatPageContent() {
                           </button>
 
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              if (!isOtherUserOnline) {
+                                toast.error(`${displayUser.name || 'User'} is offline.`);
+                                return;
+                              }
                               call.startCall(
                                 {
                                   id: displayUser.id,
@@ -724,8 +747,8 @@ function ChatPageContent() {
                                   avatar: displayUser.profilePhoto,
                                 },
                                 'video'
-                              )
-                            }
+                              );
+                            }}
                             className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors cursor-pointer"
                             title="Video Call"
                           >
