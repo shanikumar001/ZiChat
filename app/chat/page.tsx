@@ -18,13 +18,16 @@ import {
   useUpdateGroup,
 } from '../../hooks/useQueries';
 import { useSocketMessages, useTypingIndicator, useMessageNotifications } from '../../hooks/useSocket';
+import { useWebRTCCall } from '../../hooks/useWebRTCCall';
+import { CallModal } from './components/CallModal';
 import { getMediaUrl, getApiBase, fetchApi } from '../../lib/utils';
 import { toast } from 'sonner';
 import {
   MessageSquare, ArrowLeft, Send, Clock, Circle,
   MoreVertical, Trash2, Plus, File, FileText, X,
   Download, FileIcon, Pin, WifiOff, Check, CheckCheck,
-  LogOut, Search, UserPlus, MessageSquarePlus, User, Sun, Moon, Users, UserCheck, Camera, Loader2
+  LogOut, Search, UserPlus, MessageSquarePlus, User, Sun, Moon, Users, UserCheck, Camera, Loader2,
+  Phone, Video
 } from 'lucide-react';
 
 function ChatPageContent() {
@@ -32,6 +35,8 @@ function ChatPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams.get('userId') || undefined;
+
+  const call = useWebRTCCall();
 
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -687,51 +692,93 @@ function ChatPageContent() {
                       </p>
                     </div>
 
-                    {/* Chat menu */}
-                    <div className="relative">
-                      <button onClick={() => setMenuOpen(menuOpen === 'chat' ? null : 'chat')}
-                        className="p-2 rounded-lg hover:bg-accent transition-colors">
-                        <MoreVertical className="h-5 w-5 text-muted-foreground" />
-                      </button>
-                      {menuOpen === 'chat' && (
-                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
-                          {displayUser.isGroup && (
-                            <button onClick={() => { setShowGroupDetailsModal(true); setMenuOpen(null); }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer">
-                              <Camera className="h-4 w-4 text-primary" />
-                              <span>Edit Group Photo & Info</span>
-                            </button>
-                          )}
-                          <button onClick={() => { handleTogglePin(userId); setMenuOpen(null); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2">
-                            <Pin className={`h-4 w-4 ${pinnedIds.includes(userId) ? 'text-primary' : ''}`} />
-                            {pinnedIds.includes(userId) ? 'Unpin Chat' : 'Pin Chat'}
+                    {/* Call Actions & Chat menu */}
+                    <div className="flex items-center gap-1">
+                      {!displayUser.isGroup && (
+                        <>
+                          <button
+                            onClick={() =>
+                              call.startCall(
+                                {
+                                  id: displayUser.id,
+                                  name: displayUser.name,
+                                  username: displayUser.username,
+                                  avatar: displayUser.profilePhoto,
+                                },
+                                'audio'
+                              )
+                            }
+                            className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors cursor-pointer"
+                            title="Voice Call"
+                          >
+                            <Phone className="h-5 w-5" />
                           </button>
-                          <button onClick={() => { handleHideConversation(userId); setMenuOpen(null); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2">
-                            <X className="h-4 w-4" /> Hide/Delete Chat
+
+                          <button
+                            onClick={() =>
+                              call.startCall(
+                                {
+                                  id: displayUser.id,
+                                  name: displayUser.name,
+                                  username: displayUser.username,
+                                  avatar: displayUser.profilePhoto,
+                                },
+                                'video'
+                              )
+                            }
+                            className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors cursor-pointer"
+                            title="Video Call"
+                          >
+                            <Video className="h-5 w-5" />
                           </button>
-                          <div className="border-t border-border my-1" />
-                          <button onClick={() => { handleClearChat(); setMenuOpen(null); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2">
-                            <Trash2 className="h-4 w-4" /> Clear History
-                          </button>
-                          <button onClick={() => { toggleTheme(); setMenuOpen(null); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center justify-between text-foreground cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              {theme === 'dark' ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-warning" />}
-                              <span>Theme Mode</span>
-                            </div>
-                            <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                              {theme === 'dark' ? 'Dark' : 'Light'}
-                            </span>
-                          </button>
-                          <button onClick={() => { handleLogout(); setMenuOpen(null); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-destructive/10 text-destructive font-medium transition-colors flex items-center gap-2 cursor-pointer">
-                            <LogOut className="h-4 w-4" /> Log Out
-                          </button>
-                        </div>
+                        </>
                       )}
+
+                      <div className="relative">
+                        <button onClick={() => setMenuOpen(menuOpen === 'chat' ? null : 'chat')}
+                          className="p-2 rounded-lg hover:bg-accent transition-colors">
+                          <MoreVertical className="h-5 w-5 text-muted-foreground" />
+                        </button>
+                        {menuOpen === 'chat' && (
+                          <div className="absolute right-0 top-full mt-1.5 w-52 bg-card border border-border/80 rounded-xl shadow-2xl z-50 py-1.5 animate-fade-in ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
+                            {displayUser.isGroup && (
+                              <button onClick={() => { setShowGroupDetailsModal(true); setMenuOpen(null); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2 cursor-pointer">
+                                <Camera className="h-4 w-4 text-primary" />
+                                <span>Edit Group Photo & Info</span>
+                              </button>
+                            )}
+                            <button onClick={() => { handleTogglePin(userId); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2">
+                              <Pin className={`h-4 w-4 ${pinnedIds.includes(userId) ? 'text-primary' : ''}`} />
+                              {pinnedIds.includes(userId) ? 'Unpin Chat' : 'Pin Chat'}
+                            </button>
+                            <button onClick={() => { handleHideConversation(userId); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2">
+                              <X className="h-4 w-4" /> Hide/Delete Chat
+                            </button>
+                            <div className="border-t border-border my-1" />
+                            <button onClick={() => { handleClearChat(); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2">
+                              <Trash2 className="h-4 w-4" /> Clear History
+                            </button>
+                            <button onClick={() => { toggleTheme(); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center justify-between text-foreground cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                {theme === 'dark' ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-warning" />}
+                                <span>Theme Mode</span>
+                              </div>
+                              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                {theme === 'dark' ? 'Dark' : 'Light'}
+                              </span>
+                            </button>
+                            <button onClick={() => { handleLogout(); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-destructive/10 text-destructive font-medium transition-colors flex items-center gap-2 cursor-pointer">
+                              <LogOut className="h-4 w-4" /> Log Out
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -1284,6 +1331,8 @@ function ChatPageContent() {
           </div>
         </div>
       )}
+      {/* WebRTC Audio & Video Calling Modal */}
+      <CallModal {...call} />
     </main>
   );
 }
