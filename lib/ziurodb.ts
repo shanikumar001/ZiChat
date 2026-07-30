@@ -136,6 +136,15 @@ export async function updateMany(
   return (result.data as Record<string, unknown>) || {};
 }
 
+/** Delete many documents matching a filter */
+export async function deleteMany(
+  collection: string,
+  filter: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const result = await query(`db.${collection}.deleteMany(${toMongoFilter(filter)})`);
+  return (result.data as Record<string, unknown>) || {};
+}
+
 /** Find a document by its _id field */
 export async function findById(collection: string, id: string): Promise<Record<string, unknown> | null> {
   const result = await query(`db.${collection}.findOne({ _id: ObjectId("${id}") })`);

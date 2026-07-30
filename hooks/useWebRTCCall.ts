@@ -68,7 +68,7 @@ export function useWebRTCCall() {
     };
   }, []);
 
-  // Helper to dispatch signals across both Socket.io and BroadcastChannel
+  // Helper to dispatch signals across Socket.io, BroadcastChannel, and Next.js /api/signal relay
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const emitSignal = useCallback((event: string, data: any) => {
     if (socket) {
@@ -87,6 +87,22 @@ export function useWebRTCCall() {
         });
       } catch {
         // channel error ignore
+      }
+    }
+    if (data?.to) {
+      try {
+        fetch('/api/signal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: data.to,
+            from: currentUser?.id,
+            event,
+            data,
+          }),
+        }).catch(() => {});
+      } catch {
+        // fetch error ignore
       }
     }
   }, [socket, currentUser]);
@@ -541,16 +557,20 @@ export function useWebRTCCall() {
   }, [isScreenSharing, localStream]);
 
   // ----------------------------------------------------
+  // ----------------------------------------------------
   // Shared Signaling Message Processors
   // ----------------------------------------------------
+  const checkIsTargetingMe = useCallback((to?: unknown) => {
+    if (!to) return true;
+    const targetStr = to.toString();
+    const myIdStr = currentUser?.id ? currentUser.id.toString() : '';
+    const myUsernameStr = currentUser?.username ? currentUser.username.toString() : '';
+    return (myIdStr && targetStr === myIdStr) || (myUsernameStr && targetStr === myUsernameStr);
+  }, [currentUser]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processIncomingCall = useCallback((data: any) => {
-    const isTargetingMe =
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data.to)) return;
 
     if (callState !== 'idle') {
       emitSignal('rejectCall', { to: data.callerInfo?.id || data.from, reason: 'busy' });
@@ -563,16 +583,11 @@ export function useWebRTCCall() {
     setCallerInfo(data.callerInfo || { id: data.from, name: 'Incoming Call' });
     pendingOfferRef.current = data.offer;
     playRingtone();
-  }, [currentUser, callState, emitSignal, playRingtone]);
+  }, [checkIsTargetingMe, callState, emitSignal, playRingtone]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processCallAccepted = useCallback(async (data: any) => {
-    const isTargetingMe =
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data.to)) return;
 
     stopTones();
     if (peerConnectionRef.current && data.answer) {
@@ -585,16 +600,11 @@ export function useWebRTCCall() {
         }, 1000);
       }
     }
-  }, [currentUser, stopTones]);
+  }, [checkIsTargetingMe, stopTones]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processIceCandidate = useCallback(async (data: any) => {
-    const isTargetingMe =
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data.to)) return;
 
     if (peerConnectionRef.current && data.candidate) {
       try {
@@ -603,16 +613,11 @@ export function useWebRTCCall() {
         // Candidate error ignore
       }
     }
-  }, [currentUser]);
+  }, [checkIsTargetingMe]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processCallRejected = useCallback((data: any) => {
-    const isTargetingMe =
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data.to)) return;
 
     if (data?.reason === 'busy') {
       toast.info('User is currently on another call');
@@ -620,37 +625,79 @@ export function useWebRTCCall() {
       toast.info('Call declined');
     }
     cleanupCall();
-  }, [currentUser, cleanupCall]);
+  }, [checkIsTargetingMe, cleanupCall]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processCallEnded = useCallback((data: any) => {
-    const isTargetingMe =
-      !data ||
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data?.to)) return;
 
     toast.info('Call ended by remote user');
     cleanupCall();
-  }, [currentUser, cleanupCall]);
+  }, [checkIsTargetingMe, cleanupCall]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processToggleMedia = useCallback((data: any) => {
-    const isTargetingMe =
-      !data.to ||
-      (currentUser?.id && data.to === currentUser.id) ||
-      (currentUser?.username && data.to === currentUser.username);
-
-    if (!isTargetingMe) return;
+    if (!checkIsTargetingMe(data.to)) return;
 
     if (data.type === 'audio') {
       setRemoteMicMuted(!data.enabled);
     } else if (data.type === 'video') {
       setRemoteVideoOff(!data.enabled);
     }
-  }, [currentUser]);
+  }, [checkIsTargetingMe]);
+
+  // ----------------------------------------------------
+  // Serverless Polling Loop for /api/signal (Works across different browsers/devices on Vercel)
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!currentUser?.id && !currentUser?.username) return;
+
+    const pollSignals = async () => {
+      try {
+        const query = new URLSearchParams();
+        if (currentUser.id) query.set('userId', currentUser.id);
+        if (currentUser.username) query.set('username', currentUser.username);
+
+        const res = await fetch(`/api/signal?${query.toString()}`);
+        if (!res.ok) return;
+
+        const { signals } = await res.json();
+        if (Array.isArray(signals) && signals.length > 0) {
+          for (const item of signals) {
+            const { event, data } = item;
+            if (event === 'callUser' || event === 'call-user' || event === 'incomingCall' || event === 'incoming-call') {
+              processIncomingCall(data);
+            } else if (event === 'answerCall' || event === 'answer-call' || event === 'callAccepted' || event === 'call-accepted') {
+              processCallAccepted(data);
+            } else if (event === 'iceCandidate' || event === 'ice-candidate') {
+              processIceCandidate(data);
+            } else if (event === 'rejectCall' || event === 'reject-call' || event === 'callRejected' || event === 'call-rejected') {
+              processCallRejected(data);
+            } else if (event === 'endCall' || event === 'end-call' || event === 'callEnded' || event === 'call-ended') {
+              processCallEnded(data);
+            } else if (event === 'toggleMedia' || event === 'toggle-media') {
+              processToggleMedia(data);
+            }
+          }
+        }
+      } catch {
+        // Polling error ignore
+      }
+    };
+
+    const intervalId = setInterval(pollSignals, 1000);
+    pollSignals();
+
+    return () => clearInterval(intervalId);
+  }, [
+    currentUser,
+    processIncomingCall,
+    processCallAccepted,
+    processIceCandidate,
+    processCallRejected,
+    processCallEnded,
+    processToggleMedia,
+  ]);
 
   // ----------------------------------------------------
   // Listen to Socket.io & BroadcastChannel signals
