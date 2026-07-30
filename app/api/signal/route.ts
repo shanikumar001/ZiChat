@@ -103,19 +103,22 @@ export async function GET(req: Request) {
 
         if (dbSignals && dbSignals.length > 0) {
           fetchedSignals = dbSignals;
-          // Delete consumed signals
-          const signalIds = dbSignals.map((s) => s.id || s._id);
-          withFallback(
-            () => ziurodb.deleteMany('signals', { to: { $in: userKeys } }),
-            async () => {
-              await connectToDatabase();
-              const db = (await import('mongoose')).connection.db;
-              if (db) {
-                await db.collection('signals').deleteMany({ _id: { $in: signalIds } });
-              }
-            },
-            'signal:delete'
-          ).catch(() => {});
+          // Delete consumed signals immediately so they are never returned twice
+          try {
+            await withFallback(
+              () => ziurodb.deleteMany('signals', { to: { $in: userKeys } }),
+              async () => {
+                await connectToDatabase();
+                const db = (await import('mongoose')).connection.db;
+                if (db) {
+                  await db.collection('signals').deleteMany({ to: { $in: userKeys } });
+                }
+              },
+              'signal:delete'
+            );
+          } catch {
+            // ignore
+          }
         }
       } catch {
         // Memory result fallback

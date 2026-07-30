@@ -556,12 +556,16 @@ export function useWebRTCCall() {
     }
   }, [isScreenSharing, localStream]);
 
-  // ----------------------------------------------------
+  const callStateRef = useRef<CallState>('idle');
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
+
   // ----------------------------------------------------
   // Shared Signaling Message Processors
   // ----------------------------------------------------
   const checkIsTargetingMe = useCallback((to?: unknown) => {
-    if (!to) return true;
+    if (!to) return false;
     const targetStr = to.toString();
     const myIdStr = currentUser?.id ? currentUser.id.toString() : '';
     const myUsernameStr = currentUser?.username ? currentUser.username.toString() : '';
@@ -570,11 +574,14 @@ export function useWebRTCCall() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processIncomingCall = useCallback((data: any) => {
+    const callerId = data.callerInfo?.id || data.from;
+    // Ignore calls originating from myself
+    if (callerId && currentUser?.id && callerId.toString() === currentUser.id.toString()) return;
     if (!checkIsTargetingMe(data.to)) return;
 
-    if (callState !== 'idle') {
-      emitSignal('rejectCall', { to: data.callerInfo?.id || data.from, reason: 'busy' });
-      emitSignal('reject-call', { to: data.callerInfo?.id || data.from, reason: 'busy' });
+    if (callStateRef.current !== 'idle') {
+      emitSignal('rejectCall', { to: callerId, reason: 'busy' });
+      emitSignal('reject-call', { to: callerId, reason: 'busy' });
       return;
     }
 
@@ -583,7 +590,7 @@ export function useWebRTCCall() {
     setCallerInfo(data.callerInfo || { id: data.from, name: 'Incoming Call' });
     pendingOfferRef.current = data.offer;
     playRingtone();
-  }, [checkIsTargetingMe, callState, emitSignal, playRingtone]);
+  }, [currentUser, checkIsTargetingMe, emitSignal, playRingtone]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processCallAccepted = useCallback(async (data: any) => {
@@ -619,20 +626,25 @@ export function useWebRTCCall() {
   const processCallRejected = useCallback((data: any) => {
     if (!checkIsTargetingMe(data.to)) return;
 
-    if (data?.reason === 'busy') {
-      toast.info('User is currently on another call');
-    } else {
-      toast.info('Call declined');
+    // Only process call rejection if we are actively calling or connected
+    if (callStateRef.current === 'calling' || callStateRef.current === 'connected') {
+      if (data?.reason === 'busy') {
+        toast.info('User is currently on another call');
+      } else {
+        toast.info('Call declined');
+      }
+      cleanupCall();
     }
-    cleanupCall();
   }, [checkIsTargetingMe, cleanupCall]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processCallEnded = useCallback((data: any) => {
     if (!checkIsTargetingMe(data?.to)) return;
 
-    toast.info('Call ended by remote user');
-    cleanupCall();
+    if (callStateRef.current === 'calling' || callStateRef.current === 'connected') {
+      toast.info('Call ended by remote user');
+      cleanupCall();
+    }
   }, [checkIsTargetingMe, cleanupCall]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -664,6 +676,16 @@ export function useWebRTCCall() {
         const { signals } = await res.json();
         if (Array.isArray(signals) && signals.length > 0) {
           for (const item of signals) {
+            // Ignore signals sent by myself
+            if (
+              item.from &&
+              currentUser?.id &&
+              (item.from.toString() === currentUser.id.toString() ||
+                item.from.toString() === currentUser.username?.toString())
+            ) {
+              continue;
+            }
+
             const { event, data } = item;
             if (event === 'callUser' || event === 'call-user' || event === 'incomingCall' || event === 'incoming-call') {
               processIncomingCall(data);
