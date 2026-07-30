@@ -53,6 +53,43 @@ export function useWebRTCCall() {
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+
+  // Initialize BroadcastChannel fallback for multi-tab / local testing
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      broadcastChannelRef.current = new BroadcastChannel('zichat_webrtc_signaling');
+    }
+    return () => {
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.close();
+        broadcastChannelRef.current = null;
+      }
+    };
+  }, []);
+
+  // Helper to dispatch signals across both Socket.io and BroadcastChannel
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emitSignal = useCallback((event: string, data: any) => {
+    if (socket) {
+      try {
+        socket.emit(event, data);
+      } catch {
+        // socket emit error ignore
+      }
+    }
+    if (broadcastChannelRef.current) {
+      try {
+        broadcastChannelRef.current.postMessage({
+          event,
+          data,
+          senderId: currentUser?.id,
+        });
+      } catch {
+        // channel error ignore
+      }
+    }
+  }, [socket, currentUser]);
 
   // ----------------------------------------------------
   // Audio Synthesizer (Ringtone & Ringback)
@@ -101,14 +138,14 @@ export function useWebRTCCall() {
       osc1.stop(ctx.currentTime + durationSec);
       osc2.stop(ctx.currentTime + durationSec);
     } catch {
-      // Audio context might be restricted before user gesture
+      // Audio context restricted before user gesture
     }
   }, []);
 
   const playRingtone = useCallback(() => {
     stopTones();
     const trigger = () => {
-      playTone(852, 1209, 1.2); // WhatsApp incoming call tone dual-frequency
+      playTone(852, 1209, 1.2);
     };
     trigger();
     ringtoneTimerRef.current = setInterval(trigger, 2500);
@@ -117,7 +154,7 @@ export function useWebRTCCall() {
   const playRingback = useCallback(() => {
     stopTones();
     const trigger = () => {
-      playTone(440, 480, 1.5); // Classic US/UK call ringback
+      playTone(440, 480, 1.5);
     };
     trigger();
     ringtoneTimerRef.current = setInterval(trigger, 4000);
@@ -201,9 +238,9 @@ export function useWebRTCCall() {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && socket) {
-        socket.emit('iceCandidate', { to: targetUserId, candidate: event.candidate });
-        socket.emit('ice-candidate', { to: targetUserId, candidate: event.candidate });
+      if (event.candidate) {
+        emitSignal('iceCandidate', { to: targetUserId, candidate: event.candidate });
+        emitSignal('ice-candidate', { to: targetUserId, candidate: event.candidate });
       }
     };
 
@@ -238,15 +275,24 @@ export function useWebRTCCall() {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [socket, stopTones, cleanupCall]);
+  }, [emitSignal, stopTones, cleanupCall]);
 
   // ----------------------------------------------------
   // Start Outgoing Call
   // ----------------------------------------------------
   const startCall = useCallback(async (userToCall: CallUser, type: CallType) => {
-    if (!socket || !isConnected) {
-      toast.error('Socket connection offline. Unable to initiate call.');
+    if (!userToCall || !userToCall.id) {
+      toast.error('Invalid recipient specified.');
       return;
+    }
+
+    // Try auto-connecting socket if disconnected
+    if (socket && !socket.connected) {
+      try {
+        socket.connect();
+      } catch {
+        // ignore
+      }
     }
 
     try {
@@ -266,20 +312,20 @@ export function useWebRTCCall() {
       await pc.setLocalDescription(offer);
 
       const callerData = {
-        id: currentUser?.id,
+        id: currentUser?.id || 'local_user',
         name: currentUser?.name || currentUser?.username || 'User',
         username: currentUser?.username,
         avatar: currentUser?.profilePhoto,
       };
 
-      socket.emit('callUser', {
+      emitSignal('callUser', {
         to: userToCall.id,
         offer,
         callType: type,
         callerInfo: callerData,
       });
 
-      socket.emit('call-user', {
+      emitSignal('call-user', {
         to: userToCall.id,
         offer,
         callType: type,
@@ -288,13 +334,13 @@ export function useWebRTCCall() {
     } catch {
       cleanupCall();
     }
-  }, [socket, isConnected, playRingback, getMedia, createPeerConnection, currentUser, cleanupCall]);
+  }, [socket, playRingback, getMedia, createPeerConnection, currentUser, emitSignal, cleanupCall]);
 
   // ----------------------------------------------------
   // Accept Incoming Call
   // ----------------------------------------------------
   const acceptCall = useCallback(async () => {
-    if (!callerInfo || !pendingOfferRef.current || !socket) return;
+    if (!callerInfo || !pendingOfferRef.current) return;
 
     stopTones();
     try {
@@ -309,8 +355,8 @@ export function useWebRTCCall() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      socket.emit('answerCall', { to: callerInfo.id, answer });
-      socket.emit('answer-call', { to: callerInfo.id, answer });
+      emitSignal('answerCall', { to: callerInfo.id, answer });
+      emitSignal('answer-call', { to: callerInfo.id, answer });
 
       setCallState('connected');
       if (!callTimerRef.current) {
@@ -323,31 +369,31 @@ export function useWebRTCCall() {
       toast.error('Failed to connect call media');
       cleanupCall();
     }
-  }, [callerInfo, socket, stopTones, getMedia, callType, createPeerConnection, cleanupCall]);
+  }, [callerInfo, stopTones, getMedia, callType, createPeerConnection, emitSignal, cleanupCall]);
 
   // ----------------------------------------------------
   // Reject Incoming Call
   // ----------------------------------------------------
   const rejectCall = useCallback(() => {
-    if (callerInfo && socket) {
-      socket.emit('rejectCall', { to: callerInfo.id });
-      socket.emit('reject-call', { to: callerInfo.id });
+    if (callerInfo) {
+      emitSignal('rejectCall', { to: callerInfo.id });
+      emitSignal('reject-call', { to: callerInfo.id });
     }
     cleanupCall();
-  }, [callerInfo, socket, cleanupCall]);
+  }, [callerInfo, emitSignal, cleanupCall]);
 
   // ----------------------------------------------------
   // End Active Call
   // ----------------------------------------------------
   const endCall = useCallback(() => {
     const peerId = targetUser?.id || callerInfo?.id;
-    if (peerId && socket) {
-      socket.emit('endCall', { to: peerId });
-      socket.emit('end-call', { to: peerId });
+    if (peerId) {
+      emitSignal('endCall', { to: peerId });
+      emitSignal('end-call', { to: peerId });
     }
     toast.info('Call ended');
     cleanupCall();
-  }, [targetUser, callerInfo, socket, cleanupCall]);
+  }, [targetUser, callerInfo, emitSignal, cleanupCall]);
 
   // ----------------------------------------------------
   // Media Controls (Mic, Video, Screen Share)
@@ -360,13 +406,13 @@ export function useWebRTCCall() {
         setIsMicMuted(!audioTrack.enabled);
 
         const peerId = targetUser?.id || callerInfo?.id;
-        if (peerId && socket) {
-          socket.emit('toggleMedia', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
-          socket.emit('toggle-media', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
+        if (peerId) {
+          emitSignal('toggleMedia', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
+          emitSignal('toggle-media', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
         }
       }
     }
-  }, [localStream, targetUser, callerInfo, socket]);
+  }, [localStream, targetUser, callerInfo, emitSignal]);
 
   const toggleVideo = useCallback(() => {
     if (localStream) {
@@ -376,13 +422,13 @@ export function useWebRTCCall() {
         setIsVideoOff(!videoTrack.enabled);
 
         const peerId = targetUser?.id || callerInfo?.id;
-        if (peerId && socket) {
-          socket.emit('toggleMedia', { to: peerId, type: 'video', enabled: videoTrack.enabled });
-          socket.emit('toggle-media', { to: peerId, type: 'video', enabled: videoTrack.enabled });
+        if (peerId) {
+          emitSignal('toggleMedia', { to: peerId, type: 'video', enabled: videoTrack.enabled });
+          emitSignal('toggle-media', { to: peerId, type: 'video', enabled: videoTrack.enabled });
         }
       }
     }
-  }, [localStream, targetUser, callerInfo, socket]);
+  }, [localStream, targetUser, callerInfo, emitSignal]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!peerConnectionRef.current || !localStream) return;
@@ -392,7 +438,6 @@ export function useWebRTCCall() {
     const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
 
     if (isScreenSharing) {
-      // Revert to camera
       if (screenTrackRef.current) {
         screenTrackRef.current.stop();
         screenTrackRef.current = null;
@@ -433,116 +478,192 @@ export function useWebRTCCall() {
   }, [isScreenSharing, localStream]);
 
   // ----------------------------------------------------
-  // Socket Signal Listeners
+  // Shared Signaling Message Processors
+  // ----------------------------------------------------
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processIncomingCall = useCallback((data: any) => {
+    const isTargetingMe =
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    if (callState !== 'idle') {
+      emitSignal('rejectCall', { to: data.callerInfo?.id || data.from, reason: 'busy' });
+      emitSignal('reject-call', { to: data.callerInfo?.id || data.from, reason: 'busy' });
+      return;
+    }
+
+    setCallState('incoming');
+    setCallType(data.callType || 'video');
+    setCallerInfo(data.callerInfo || { id: data.from, name: 'Incoming Call' });
+    pendingOfferRef.current = data.offer;
+    playRingtone();
+  }, [currentUser, callState, emitSignal, playRingtone]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processCallAccepted = useCallback(async (data: any) => {
+    const isTargetingMe =
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    stopTones();
+    if (peerConnectionRef.current && data.answer) {
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+      setCallState('connected');
+      if (!callTimerRef.current) {
+        setCallDuration(0);
+        callTimerRef.current = setInterval(() => {
+          setCallDuration((prev) => prev + 1);
+        }, 1000);
+      }
+    }
+  }, [currentUser, stopTones]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processIceCandidate = useCallback(async (data: any) => {
+    const isTargetingMe =
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    if (peerConnectionRef.current && data.candidate) {
+      try {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch {
+        // Candidate error ignore
+      }
+    }
+  }, [currentUser]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processCallRejected = useCallback((data: any) => {
+    const isTargetingMe =
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    if (data?.reason === 'busy') {
+      toast.info('User is currently on another call');
+    } else {
+      toast.info('Call declined');
+    }
+    cleanupCall();
+  }, [currentUser, cleanupCall]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processCallEnded = useCallback((data: any) => {
+    const isTargetingMe =
+      !data ||
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    toast.info('Call ended by remote user');
+    cleanupCall();
+  }, [currentUser, cleanupCall]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processToggleMedia = useCallback((data: any) => {
+    const isTargetingMe =
+      !data.to ||
+      (currentUser?.id && data.to === currentUser.id) ||
+      (currentUser?.username && data.to === currentUser.username);
+
+    if (!isTargetingMe) return;
+
+    if (data.type === 'audio') {
+      setRemoteMicMuted(!data.enabled);
+    } else if (data.type === 'video') {
+      setRemoteVideoOff(!data.enabled);
+    }
+  }, [currentUser]);
+
+  // ----------------------------------------------------
+  // Listen to Socket.io & BroadcastChannel signals
   // ----------------------------------------------------
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    // 1. BroadcastChannel Listener (Multi-tab / local network fallback)
+    const channel = broadcastChannelRef.current;
+    if (channel) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      channel.onmessage = (msg: MessageEvent<any>) => {
+        const { event, data, senderId } = msg.data || {};
+        if (senderId && currentUser?.id && senderId === currentUser.id) return; // ignore self broadcast
 
-    // 1. Incoming Call Event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleIncomingCall = (data: any) => {
-      if (callState !== 'idle') {
-        // Busy signal back to caller
-        socket.emit('rejectCall', { to: data.callerInfo?.id || data.from, reason: 'busy' });
-        socket.emit('reject-call', { to: data.callerInfo?.id || data.from, reason: 'busy' });
-        return;
-      }
-
-      setCallState('incoming');
-      setCallType(data.callType || 'video');
-      setCallerInfo(data.callerInfo || { id: data.from, name: 'Incoming Call' });
-      pendingOfferRef.current = data.offer;
-      playRingtone();
-    };
-
-    // 2. Call Accepted Event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleCallAccepted = async (data: any) => {
-      stopTones();
-      if (peerConnectionRef.current && data.answer) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        setCallState('connected');
-        if (!callTimerRef.current) {
-          setCallDuration(0);
-          callTimerRef.current = setInterval(() => {
-            setCallDuration((prev) => prev + 1);
-          }, 1000);
+        if (event === 'callUser' || event === 'call-user' || event === 'incomingCall' || event === 'incoming-call') {
+          processIncomingCall(data);
+        } else if (event === 'answerCall' || event === 'answer-call' || event === 'callAccepted' || event === 'call-accepted') {
+          processCallAccepted(data);
+        } else if (event === 'iceCandidate' || event === 'ice-candidate') {
+          processIceCandidate(data);
+        } else if (event === 'rejectCall' || event === 'reject-call' || event === 'callRejected' || event === 'call-rejected') {
+          processCallRejected(data);
+        } else if (event === 'endCall' || event === 'end-call' || event === 'callEnded' || event === 'call-ended') {
+          processCallEnded(data);
+        } else if (event === 'toggleMedia' || event === 'toggle-media') {
+          processToggleMedia(data);
         }
-      }
-    };
+      };
+    }
 
-    // 3. ICE Candidate Event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleIceCandidate = async (data: any) => {
-      if (peerConnectionRef.current && data.candidate) {
-        try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch {
-          // Candidate error ignore
-        }
-      }
-    };
+    // 2. Socket.io Listeners
+    if (socket) {
+      socket.on('incomingCall', processIncomingCall);
+      socket.on('incoming-call', processIncomingCall);
 
-    // 4. Call Rejected Event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleCallRejected = (data: any) => {
-      if (data?.reason === 'busy') {
-        toast.info('User is currently on another call');
-      } else {
-        toast.info('Call declined');
-      }
-      cleanupCall();
-    };
+      socket.on('callAccepted', processCallAccepted);
+      socket.on('call-accepted', processCallAccepted);
 
-    // 5. Call Ended Event
-    const handleCallEnded = () => {
-      toast.info('Call ended by remote user');
-      cleanupCall();
-    };
+      socket.on('iceCandidate', processIceCandidate);
+      socket.on('ice-candidate', processIceCandidate);
 
-    // 6. Media Toggle Event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleToggleMedia = (data: any) => {
-      if (data.type === 'audio') {
-        setRemoteMicMuted(!data.enabled);
-      } else if (data.type === 'video') {
-        setRemoteVideoOff(!data.enabled);
-      }
-    };
+      socket.on('callRejected', processCallRejected);
+      socket.on('call-rejected', processCallRejected);
 
-    socket.on('incomingCall', handleIncomingCall);
-    socket.on('incoming-call', handleIncomingCall);
+      socket.on('callEnded', processCallEnded);
+      socket.on('call-ended', processCallEnded);
 
-    socket.on('callAccepted', handleCallAccepted);
-    socket.on('call-accepted', handleCallAccepted);
-
-    socket.on('iceCandidate', handleIceCandidate);
-    socket.on('ice-candidate', handleIceCandidate);
-
-    socket.on('callRejected', handleCallRejected);
-    socket.on('call-rejected', handleCallRejected);
-
-    socket.on('callEnded', handleCallEnded);
-    socket.on('call-ended', handleCallEnded);
-
-    socket.on('toggleMedia', handleToggleMedia);
-    socket.on('toggle-media', handleToggleMedia);
+      socket.on('toggleMedia', processToggleMedia);
+      socket.on('toggle-media', processToggleMedia);
+    }
 
     return () => {
-      socket.off('incomingCall', handleIncomingCall);
-      socket.off('incoming-call', handleIncomingCall);
-      socket.off('callAccepted', handleCallAccepted);
-      socket.off('call-accepted', handleCallAccepted);
-      socket.off('iceCandidate', handleIceCandidate);
-      socket.off('ice-candidate', handleIceCandidate);
-      socket.off('callRejected', handleCallRejected);
-      socket.off('call-rejected', handleCallRejected);
-      socket.off('callEnded', handleCallEnded);
-      socket.off('call-ended', handleCallEnded);
-      socket.off('toggleMedia', handleToggleMedia);
-      socket.off('toggle-media', handleToggleMedia);
+      if (socket) {
+        socket.off('incomingCall', processIncomingCall);
+        socket.off('incoming-call', processIncomingCall);
+        socket.off('callAccepted', processCallAccepted);
+        socket.off('call-accepted', processCallAccepted);
+        socket.off('iceCandidate', processIceCandidate);
+        socket.off('ice-candidate', processIceCandidate);
+        socket.off('callRejected', processCallRejected);
+        socket.off('call-rejected', processCallRejected);
+        socket.off('callEnded', processCallEnded);
+        socket.off('call-ended', processCallEnded);
+        socket.off('toggleMedia', processToggleMedia);
+        socket.off('toggle-media', processToggleMedia);
+      }
     };
-  }, [socket, isConnected, callState, playRingtone, stopTones, cleanupCall]);
+  }, [
+    socket,
+    currentUser,
+    processIncomingCall,
+    processCallAccepted,
+    processIceCandidate,
+    processCallRejected,
+    processCallEnded,
+    processToggleMedia,
+  ]);
 
   return {
     callState,

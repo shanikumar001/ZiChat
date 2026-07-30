@@ -14,8 +14,12 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | null>(null);
 
 function getSocketUrl(): string {
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+  if (socketUrl && typeof socketUrl === 'string' && socketUrl.trim()) {
+    return socketUrl.replace(/\/+$/, '');
+  }
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (apiUrl && typeof apiUrl === 'string') {
+  if (apiUrl && typeof apiUrl === 'string' && apiUrl.startsWith('http')) {
     return apiUrl.replace(/\/+$/, '');
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
