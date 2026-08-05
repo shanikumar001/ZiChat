@@ -41,8 +41,8 @@ The frontend and backend are unified in a single Next.js 16 application — clie
   - Single tick — Message sent to the server.
   - Double grey tick — Message delivered to the recipient.
   - Double green tick — Recipient opened and read the conversation.
-- **Live Typing Indicators** — Animated bouncing dots appear when the other user is typing. Active typing conversations are automatically promoted to the top of the sidebar.
-- **Media Sharing** — Send images, videos, PDFs, and documents. Files are uploaded to Cloudinary CDN and streamed back as permanent HTTPS URLs.
+- **Live Typing Indicators** - Animated bouncing dots appear when the other user is typing. Active typing conversations are automatically promoted to the top of the sidebar.
+- **Media Sharing** - Send images, videos, PDFs, and documents. Files are uploaded to Cloudinary CDN and streamed back as permanent HTTPS URLs.
 
 ### Chat Management
 - **User Search** — Find registered users by email or `@username` and start a direct conversation.
