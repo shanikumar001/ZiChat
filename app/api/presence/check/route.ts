@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { activeUserHeartbeats } from '../heartbeat/route';
+import { activeUserHeartbeats } from '@/lib/presenceStore';
 import { connectToDatabase } from '@/lib/mongodb';
 import { withFallback } from '@/lib/db';
 import * as ziurodb from '@/lib/ziurodb';

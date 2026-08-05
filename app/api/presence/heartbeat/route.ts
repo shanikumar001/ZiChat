@@ -3,8 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { withFallback } from '@/lib/db';
 import * as ziurodb from '@/lib/ziurodb';
 
-// In-memory presence map for ultra-fast active user tracking
-export const activeUserHeartbeats = new Map<string, number>();
+import { activeUserHeartbeats } from '@/lib/presenceStore';
 
 export async function POST(req: Request) {
   try {
