@@ -56,6 +56,40 @@ export function useWebRTCCall() {
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
+  const callerInfoRef = useRef<CallUser | null>(null);
+  const targetUserRef = useRef<CallUser | null>(null);
+  const callStateRef = useRef<CallState>('idle');
+  const processedSignalIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    callerInfoRef.current = callerInfo;
+  }, [callerInfo]);
+
+  useEffect(() => {
+    targetUserRef.current = targetUser;
+  }, [targetUser]);
+
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
+
+  const isSignalAlreadyProcessed = useCallback((signalId?: string, createdAt?: string) => {
+    if (createdAt) {
+      const age = Date.now() - new Date(createdAt).getTime();
+      if (age > 25000) return true; // Ignore stale signals older than 25s
+    }
+    if (!signalId) return false;
+    if (processedSignalIdsRef.current.has(signalId)) {
+      return true;
+    }
+    processedSignalIdsRef.current.add(signalId);
+    if (processedSignalIdsRef.current.size > 200) {
+      const firstKey = processedSignalIdsRef.current.values().next().value;
+      if (firstKey) processedSignalIdsRef.current.delete(firstKey);
+    }
+    return false;
+  }, []);
+
   // Initialize BroadcastChannel fallback for multi-tab / local testing
   useEffect(() => {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -72,9 +106,13 @@ export function useWebRTCCall() {
   // Helper to dispatch signals across Socket.io, BroadcastChannel, and Next.js /api/signal relay
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const emitSignal = useCallback((event: string, data: any) => {
+    const signalId = data?.signalId || `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const createdAt = data?.createdAt || new Date().toISOString();
+    const payload = { ...data, signalId, createdAt };
+
     if (socket) {
       try {
-        socket.emit(event, data);
+        socket.emit(event, payload);
       } catch {
         // socket emit error ignore
       }
@@ -83,23 +121,23 @@ export function useWebRTCCall() {
       try {
         broadcastChannelRef.current.postMessage({
           event,
-          data,
+          data: payload,
           senderId: currentUser?.id,
         });
       } catch {
         // channel error ignore
       }
     }
-    if (data?.to) {
+    if (payload?.to) {
       try {
         fetch('/api/signal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to: data.to,
+            to: payload.to,
             from: currentUser?.id,
             event,
-            data,
+            data: payload,
           }),
         }).catch(() => {});
       } catch {
@@ -320,7 +358,6 @@ export function useWebRTCCall() {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         emitSignal('iceCandidate', { to: targetUserId, candidate: event.candidate });
-        emitSignal('ice-candidate', { to: targetUserId, candidate: event.candidate });
       }
     };
 
@@ -405,13 +442,6 @@ export function useWebRTCCall() {
         callerInfo: callerData,
       });
 
-      emitSignal('call-user', {
-        to: userToCall.id,
-        offer,
-        callType: type,
-        callerInfo: callerData,
-      });
-
       // Auto cancel call if unanswered after 25s
       setTimeout(() => {
         if (callStateRef.current === 'calling') {
@@ -458,7 +488,6 @@ export function useWebRTCCall() {
       await pc.setLocalDescription(answer);
 
       emitSignal('answerCall', { to: callerInfo.id, answer });
-      emitSignal('answer-call', { to: callerInfo.id, answer });
 
       setCallState('connected');
       if (!callTimerRef.current) {
@@ -481,7 +510,6 @@ export function useWebRTCCall() {
   const rejectCall = useCallback(() => {
     if (callerInfo) {
       emitSignal('rejectCall', { to: callerInfo.id });
-      emitSignal('reject-call', { to: callerInfo.id });
     }
     cleanupCall();
   }, [callerInfo, emitSignal, cleanupCall]);
@@ -493,7 +521,6 @@ export function useWebRTCCall() {
     const peerId = targetUser?.id || callerInfo?.id;
     if (peerId) {
       emitSignal('endCall', { to: peerId });
-      emitSignal('end-call', { to: peerId });
     }
     toast.info('Call ended');
     cleanupCall();
@@ -512,7 +539,6 @@ export function useWebRTCCall() {
         const peerId = targetUser?.id || callerInfo?.id;
         if (peerId) {
           emitSignal('toggleMedia', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
-          emitSignal('toggle-media', { to: peerId, type: 'audio', enabled: audioTrack.enabled });
         }
       }
     }
@@ -528,7 +554,6 @@ export function useWebRTCCall() {
         const peerId = targetUser?.id || callerInfo?.id;
         if (peerId) {
           emitSignal('toggleMedia', { to: peerId, type: 'video', enabled: videoTrack.enabled });
-          emitSignal('toggle-media', { to: peerId, type: 'video', enabled: videoTrack.enabled });
         }
       }
     }
@@ -581,11 +606,6 @@ export function useWebRTCCall() {
     }
   }, [isScreenSharing, localStream]);
 
-  const callStateRef = useRef<CallState>('idle');
-  useEffect(() => {
-    callStateRef.current = callState;
-  }, [callState]);
-
   // ----------------------------------------------------
   // Shared Signaling Message Processors
   // ----------------------------------------------------
@@ -598,15 +618,23 @@ export function useWebRTCCall() {
   }, [currentUser]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processIncomingCall = useCallback((data: any) => {
+  const processIncomingCall = useCallback((data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     const callerId = data.callerInfo?.id || data.from;
     // Ignore calls originating from myself
     if (callerId && currentUser?.id && callerId.toString() === currentUser.id.toString()) return;
     if (!checkIsTargetingMe(data.to)) return;
 
     if (callStateRef.current !== 'idle') {
+      const activePeerId = callerInfoRef.current?.id || targetUserRef.current?.id;
+      if (activePeerId && callerId && activePeerId.toString() === callerId.toString()) {
+        // Re-transmitted offer from the active caller we are already talking to / calling, ignore
+        return;
+      }
       emitSignal('rejectCall', { to: callerId, reason: 'busy' });
-      emitSignal('reject-call', { to: callerId, reason: 'busy' });
       return;
     }
 
@@ -615,10 +643,14 @@ export function useWebRTCCall() {
     setCallerInfo(data.callerInfo || { id: data.from, name: 'Incoming Call' });
     pendingOfferRef.current = data.offer;
     playRingtone();
-  }, [currentUser, checkIsTargetingMe, emitSignal, playRingtone]);
+  }, [currentUser, checkIsTargetingMe, emitSignal, playRingtone, isSignalAlreadyProcessed]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processCallAccepted = useCallback(async (data: any) => {
+  const processCallAccepted = useCallback(async (data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     if (!checkIsTargetingMe(data.to)) return;
 
     stopTones();
@@ -652,10 +684,14 @@ export function useWebRTCCall() {
         }, 1000);
       }
     }
-  }, [checkIsTargetingMe, stopTones]);
+  }, [checkIsTargetingMe, stopTones, isSignalAlreadyProcessed]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processIceCandidate = useCallback(async (data: any) => {
+  const processIceCandidate = useCallback(async (data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     if (!checkIsTargetingMe(data.to)) return;
 
     const pc = peerConnectionRef.current;
@@ -670,10 +706,14 @@ export function useWebRTCCall() {
         pendingIceCandidatesRef.current.push(data.candidate);
       }
     }
-  }, [checkIsTargetingMe]);
+  }, [checkIsTargetingMe, isSignalAlreadyProcessed]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processCallRejected = useCallback((data: any) => {
+  const processCallRejected = useCallback((data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     if (!checkIsTargetingMe(data.to)) return;
 
     // Only process call rejection if we are actively calling or connected
@@ -685,20 +725,28 @@ export function useWebRTCCall() {
       }
       cleanupCall();
     }
-  }, [checkIsTargetingMe, cleanupCall]);
+  }, [checkIsTargetingMe, cleanupCall, isSignalAlreadyProcessed]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processCallEnded = useCallback((data: any) => {
+  const processCallEnded = useCallback((data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     if (!checkIsTargetingMe(data?.to)) return;
 
     if (callStateRef.current === 'calling' || callStateRef.current === 'connected') {
       toast.info('Call ended by remote user');
       cleanupCall();
     }
-  }, [checkIsTargetingMe, cleanupCall]);
+  }, [checkIsTargetingMe, cleanupCall, isSignalAlreadyProcessed]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processToggleMedia = useCallback((data: any) => {
+  const processToggleMedia = useCallback((data: any, itemMetaData?: any) => {
+    const signalId = data?.signalId || itemMetaData?.id;
+    const createdAt = data?.createdAt || itemMetaData?.createdAt;
+    if (isSignalAlreadyProcessed(signalId, createdAt)) return;
+
     if (!checkIsTargetingMe(data.to)) return;
 
     if (data.type === 'audio') {
@@ -706,7 +754,7 @@ export function useWebRTCCall() {
     } else if (data.type === 'video') {
       setRemoteVideoOff(!data.enabled);
     }
-  }, [checkIsTargetingMe]);
+  }, [checkIsTargetingMe, isSignalAlreadyProcessed]);
 
   // ----------------------------------------------------
   // Serverless Polling Loop for /api/signal (Works across different browsers/devices on Vercel)
@@ -738,17 +786,17 @@ export function useWebRTCCall() {
 
             const { event, data } = item;
             if (event === 'callUser' || event === 'call-user' || event === 'incomingCall' || event === 'incoming-call') {
-              processIncomingCall(data);
+              processIncomingCall(data, item);
             } else if (event === 'answerCall' || event === 'answer-call' || event === 'callAccepted' || event === 'call-accepted') {
-              processCallAccepted(data);
+              processCallAccepted(data, item);
             } else if (event === 'iceCandidate' || event === 'ice-candidate') {
-              processIceCandidate(data);
+              processIceCandidate(data, item);
             } else if (event === 'rejectCall' || event === 'reject-call' || event === 'callRejected' || event === 'call-rejected') {
-              processCallRejected(data);
+              processCallRejected(data, item);
             } else if (event === 'endCall' || event === 'end-call' || event === 'callEnded' || event === 'call-ended') {
-              processCallEnded(data);
+              processCallEnded(data, item);
             } else if (event === 'toggleMedia' || event === 'toggle-media') {
-              processToggleMedia(data);
+              processToggleMedia(data, item);
             }
           }
         }
@@ -801,18 +849,22 @@ export function useWebRTCCall() {
 
     // 2. Socket.io Listeners
     if (socket) {
+      socket.on('callUser', processIncomingCall);
       socket.on('incomingCall', processIncomingCall);
       socket.on('incoming-call', processIncomingCall);
 
+      socket.on('answerCall', processCallAccepted);
       socket.on('callAccepted', processCallAccepted);
       socket.on('call-accepted', processCallAccepted);
 
       socket.on('iceCandidate', processIceCandidate);
       socket.on('ice-candidate', processIceCandidate);
 
+      socket.on('rejectCall', processCallRejected);
       socket.on('callRejected', processCallRejected);
       socket.on('call-rejected', processCallRejected);
 
+      socket.on('endCall', processCallEnded);
       socket.on('callEnded', processCallEnded);
       socket.on('call-ended', processCallEnded);
 
@@ -822,16 +874,25 @@ export function useWebRTCCall() {
 
     return () => {
       if (socket) {
+        socket.off('callUser', processIncomingCall);
         socket.off('incomingCall', processIncomingCall);
         socket.off('incoming-call', processIncomingCall);
+
+        socket.off('answerCall', processCallAccepted);
         socket.off('callAccepted', processCallAccepted);
         socket.off('call-accepted', processCallAccepted);
+
         socket.off('iceCandidate', processIceCandidate);
         socket.off('ice-candidate', processIceCandidate);
+
+        socket.off('rejectCall', processCallRejected);
         socket.off('callRejected', processCallRejected);
         socket.off('call-rejected', processCallRejected);
+
+        socket.off('endCall', processCallEnded);
         socket.off('callEnded', processCallEnded);
         socket.off('call-ended', processCallEnded);
+
         socket.off('toggleMedia', processToggleMedia);
         socket.off('toggle-media', processToggleMedia);
       }

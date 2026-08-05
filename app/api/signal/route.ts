@@ -4,8 +4,10 @@ import { withFallback } from '@/lib/db';
 import * as ziurodb from '@/lib/ziurodb';
 
 // In-memory fallback signal store (for ultra-fast serverless signaling)
+// In-memory fallback signal store (for ultra-fast serverless signaling)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const memorySignals = new Map<string, any[]>();
+const SIGNAL_MAX_AGE_MS = 30000; // 30 seconds TTL for WebRTC signals
 
 export async function POST(req: Request) {
   try {
@@ -17,17 +19,21 @@ export async function POST(req: Request) {
     }
 
     const toStr = to.toString();
+    const now = Date.now();
     const signalItem = {
-      id: `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: data?.signalId || `sig_${now}_${Math.random().toString(36).substring(2, 7)}`,
       to: toStr,
       from: from ? from.toString() : '',
       event,
       data: data || {},
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(now).toISOString(),
     };
 
-    // 1. Store in memory map
-    const existing = memorySignals.get(toStr) || [];
+    // 1. Store in memory map & clean expired items from memory
+    const existing = (memorySignals.get(toStr) || []).filter((item) => {
+      const age = now - new Date(item.createdAt).getTime();
+      return age < SIGNAL_MAX_AGE_MS;
+    });
     existing.push(signalItem);
     // Keep max 20 signals per user
     if (existing.length > 20) existing.shift();
@@ -72,14 +78,19 @@ export async function GET(req: Request) {
       ...(username ? [username.toString()] : []),
     ];
 
+    const now = Date.now();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let fetchedSignals: any[] = [];
 
-    // 1. Fetch from memory store
+    // 1. Fetch from memory store & filter out stale signals
     for (const key of userKeys) {
       const mem = memorySignals.get(key);
       if (mem && mem.length > 0) {
-        fetchedSignals.push(...mem);
+        const validMem = mem.filter((item) => {
+          const age = now - new Date(item.createdAt).getTime();
+          return age < SIGNAL_MAX_AGE_MS;
+        });
+        fetchedSignals.push(...validMem);
         memorySignals.delete(key);
       }
     }
@@ -87,14 +98,16 @@ export async function GET(req: Request) {
     // 2. Fetch from DB if memory was empty
     if (fetchedSignals.length === 0) {
       try {
+        const cutoffIso = new Date(now - SIGNAL_MAX_AGE_MS).toISOString();
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const dbSignals: any[] = await withFallback(
-          () => ziurodb.find('signals', { to: { $in: userKeys } }),
+          () => ziurodb.find('signals', { to: { $in: userKeys }, createdAt: { $gte: cutoffIso } }),
           async () => {
             await connectToDatabase();
             const db = (await import('mongoose')).connection.db;
             if (db) {
-              return db.collection('signals').find({ to: { $in: userKeys } }).toArray();
+              return db.collection('signals').find({ to: { $in: userKeys }, createdAt: { $gte: cutoffIso } }).toArray();
             }
             return [];
           },
@@ -102,8 +115,12 @@ export async function GET(req: Request) {
         );
 
         if (dbSignals && dbSignals.length > 0) {
-          fetchedSignals = dbSignals;
-          // Delete consumed signals immediately so they are never returned twice
+          fetchedSignals = dbSignals.filter((item) => {
+            const age = now - new Date(item.createdAt).getTime();
+            return age < SIGNAL_MAX_AGE_MS;
+          });
+
+          // Delete consumed or expired signals immediately so they are never returned twice
           try {
             await withFallback(
               () => ziurodb.deleteMany('signals', { to: { $in: userKeys } }),
@@ -131,3 +148,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ signals: [] });
   }
 }
+
