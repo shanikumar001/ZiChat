@@ -284,17 +284,23 @@ export function useWebRTCCall() {
     }
 
     // 2. Mobile Constraint Fallback Attempts
+    const audioConstraint: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
     const constraintList: MediaStreamConstraints[] = [];
 
     if (type === 'video') {
       // Primary: Mobile front camera preference
       constraintList.push({
-        audio: true,
+        audio: audioConstraint,
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       // Fallback 1: Generic video + audio
       constraintList.push({
-        audio: true,
+        audio: audioConstraint,
         video: { facingMode: 'user' },
       });
       // Fallback 2: Basic video + audio
@@ -305,6 +311,7 @@ export function useWebRTCCall() {
     }
 
     // Final fallback: Audio only
+    constraintList.push({ audio: audioConstraint });
     constraintList.push({ audio: true });
 
     let lastError: unknown = null;

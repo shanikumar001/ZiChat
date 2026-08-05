@@ -197,6 +197,22 @@ export function CallModal({
             <>
               {/* REMOTE STREAM (Main Screen) */}
               <div className="relative w-full h-full bg-slate-950 flex items-center justify-center">
+                {/* Audio Output Element (For Audio Mode or Video Off) */}
+                {remoteStream && (callType === 'audio' || remoteVideoOff) && (
+                  <audio
+                    ref={(node) => {
+                      if (node && remoteStream) {
+                        if (node.srcObject !== remoteStream) {
+                          node.srcObject = remoteStream;
+                        }
+                        node.play().catch((err) => console.warn('Audio playback error:', err));
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    className="hidden"
+                  />
+                )}
                 {callType === 'video' && !remoteVideoOff && remoteStream ? (
                   <video
                     ref={(node) => {
